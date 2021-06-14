@@ -4,8 +4,10 @@ use std::{
     time::Duration,
 };
 
-// "1.2.3.4:80" -> "1.2.3.4" 80u16
-pub(crate) fn split_addr_str(addr_str: &str) -> Result<(String, u16), Box<dyn std::error::Error>> {
+// "1.2.3.4:80" -> "1.2.3.4" 80
+pub(crate) fn split_addr_str(
+    addr_str: &str,
+) -> Result<(String, usize), Box<dyn std::error::Error>> {
     let mut index = addr_str.len();
 
     while index > 0 {

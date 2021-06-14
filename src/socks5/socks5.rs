@@ -103,6 +103,7 @@ pub(crate) fn get_daddr(buf: &[u8]) -> Result<(String, usize), Box<dyn std::erro
 pub(crate) fn generate_daddr_buf(daddr: &String) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut buf = Vec::new();
     let (addr, port) = split_addr_str(daddr.as_str())?;
+    let port = port as u16;
 
     match (addr.as_str(), port).to_socket_addrs() {
         Ok(mut iter) => {

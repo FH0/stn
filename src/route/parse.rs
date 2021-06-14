@@ -19,11 +19,11 @@ struct RouteRaw {
     #[serde(default)]
     saddr: Vec<String>,
     #[serde(default)]
-    sport: Vec<u16>,
+    sport: Vec<usize>,
     #[serde(default)]
     daddr: Vec<String>,
     #[serde(default)]
-    dport: Vec<u16>,
+    dport: Vec<usize>,
     #[serde(default)]
     dns_domain: Vec<String>,
 
@@ -44,9 +44,9 @@ pub(crate) struct Route {
     pub(crate) tag: Vec<String>,
     pub(crate) network: Vec<String>,
     pub(crate) saddr: RouteAddr,
-    pub(crate) sport: Vec<u16>,
+    pub(crate) sport: Vec<usize>,
     pub(crate) daddr: RouteAddr,
-    pub(crate) dport: Vec<u16>,
+    pub(crate) dport: Vec<usize>,
     #[allow(dead_code)]
     pub(crate) dns_domain: RouteAddr,
 
