@@ -83,17 +83,20 @@ fn match_route_addr(route_addr: &RouteAddr, match_obj: &String) -> bool {
         || route_addr.full.is_match(format!(" {} ", match_obj))
         || route_addr.substring.is_match(match_obj)
         || {
-            let domain_vec: Vec<&str> = match_obj.as_str().split('.').collect();
+            let domain_vec: Vec<&str> = match_obj.split('.').collect();
 
-            if domain_vec.len() < 2 {
-                false
-            } else {
-                route_addr.domain.is_match(format!(
-                    " {}.{} ",
-                    domain_vec[domain_vec.len() - 2],
-                    domain_vec[domain_vec.len() - 1]
-                ))
+            let mut index = 0usize;
+            while index < domain_vec.len() {
+                if route_addr
+                    .domain
+                    .is_match(format!(" {} ", domain_vec[index..].join(".")))
+                {
+                    return true;
+                }
+                index += 1;
             }
+
+            false
         }
         || match match_obj.parse::<IpAddr>() {
             Ok(ipaddr) => match ipaddr {
