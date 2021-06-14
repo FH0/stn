@@ -35,7 +35,7 @@
       "protocol": "socks5",
       "address": "[::]:10801",
       "tcp_nodelay": true,
-      "tcp_keepalive_interval": 30,
+      "tcp_keepalive_interval": 30, // 0 means don't set
       "tcp_timeout": 300,
       "udp_timeout": 60
     },

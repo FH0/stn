@@ -146,17 +146,22 @@ pub(crate) fn set_nodelay_keepalive_interval(
     let result1 = socket2_socket.set_nodelay(nodelay);
 
     // keepalive interval
-    let tcp_keepalive = socket2::TcpKeepalive::new().with_time(keepalive_interval);
-    #[cfg(any(
-        target_os = "freebsd",
-        target_os = "fuchsia",
-        target_os = "linux",
-        target_os = "netbsd",
-        target_vendor = "apple",
-        windows,
-    ))]
-    let tcp_keepalive = tcp_keepalive.with_interval(keepalive_interval);
-    let result2 = socket2_socket.set_tcp_keepalive(&tcp_keepalive);
+    let result2 = match keepalive_interval == Duration::from_secs(0) {
+        true => Ok(()),
+        false => {
+            let tcp_keepalive = socket2::TcpKeepalive::new().with_time(keepalive_interval);
+            #[cfg(any(
+                target_os = "freebsd",
+                target_os = "fuchsia",
+                target_os = "linux",
+                target_os = "netbsd",
+                target_vendor = "apple",
+                windows,
+            ))]
+            let tcp_keepalive = tcp_keepalive.with_interval(keepalive_interval);
+            socket2_socket.set_tcp_keepalive(&tcp_keepalive)
+        }
+    };
 
     result1?;
     result2?;
