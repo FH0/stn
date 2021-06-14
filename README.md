@@ -13,5 +13,5 @@ The compiled file is `target/release/stn`.
 
 ## Configuration
 
-- [replace Redsocks](doc/redsocks)
-- [full description](doc/configuratin.md)
+- [replace Redsocks](https://github.com/FH0/stn/blob/main/doc/redsocks.md)
+- [full description](https://github.com/FH0/stn/blob/main/doc/configuration.md)
