@@ -66,7 +66,7 @@ async fn tokio_based_start(root: &serde_json::Value) {
 }
 
 fn show_help() {
-    println!("stn version:3.0");
+    println!("stn version:{}", env!("CARGO_PKG_VERSION"));
     println!("  -c [file]     specify the configuration file to start");
     println!("  -h            show this message");
 }
