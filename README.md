@@ -25,3 +25,4 @@ The compiled file is `target/release/stn`.
 - [ ] `origin` in, like dns packet, needn't daddr
 - [ ] `redirect` out, like iptables DNAT
 - [ ] `drop` out, like iptables DROP
+- [ ] `tun` in
