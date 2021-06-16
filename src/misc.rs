@@ -61,15 +61,8 @@ pub(crate) fn socketaddr_to_string(addr: &SocketAddr) -> String {
     match addr {
         SocketAddr::V4(addr) => addr.to_string(),
         SocketAddr::V6(addr) => {
-            let ptr_array = unsafe {
-                std::slice::from_raw_parts(
-                    addr as *const _ as *const u8,
-                    std::mem::size_of_val(addr),
-                )
-            };
-
-            if ptr_array[8..20] == [0u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff] {
-                SocketAddrV4::new(addr.ip().to_ipv4().unwrap(), addr.port()).to_string()
+            if let Some(addr_v4) = addr.ip().to_ipv4() {
+                SocketAddrV4::new(addr_v4, addr.port()).to_string()
             } else {
                 addr.to_string()
             }

@@ -85,15 +85,13 @@ fn match_route_addr(route_addr: &RouteAddr, match_obj: &String) -> bool {
         || {
             let domain_vec: Vec<&str> = match_obj.split('.').collect();
 
-            let mut index = 0usize;
-            while index < domain_vec.len() {
+            for index in 0..domain_vec.len() {
                 if route_addr
                     .domain
                     .is_match(format!(" {} ", domain_vec[index..].join(".")))
                 {
                     return true;
                 }
-                index += 1;
             }
 
             false
@@ -106,4 +104,13 @@ fn match_route_addr(route_addr: &RouteAddr, match_obj: &String) -> bool {
             Err(_) => false,
         }
         || route_addr.regex.is_match(match_obj.as_str())
+}
+
+#[test]
+fn test_domain() {
+    let domain = "a.b.c.d.com";
+    let domain_vec: Vec<&str> = domain.split('.').collect();
+    for index in 0..domain_vec.len() {
+        println!(" {} ", domain_vec[index..].join("."));
+    }
 }

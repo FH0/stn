@@ -110,29 +110,15 @@ pub(crate) fn generate_daddr_buf(daddr: &String) -> Result<Vec<u8>, Box<dyn std:
             let sockaddr = iter.next().unwrap();
 
             match sockaddr {
-                std::net::SocketAddr::V4(addr4) => {
-                    let ptr = unsafe {
-                        std::slice::from_raw_parts(
-                            &addr4 as *const _ as *const u8,
-                            std::mem::size_of_val(&addr4),
-                        )
-                    };
-
+                std::net::SocketAddr::V4(addr) => {
                     buf.put_u8(ATYP_IPV4);
-                    buf.put(&ptr[4..8]);
-                    buf.put(&ptr[2..4]);
+                    buf.put(addr.ip().octets()[..].as_ref());
+                    buf.put_u16(addr.port());
                 }
-                std::net::SocketAddr::V6(addr6) => {
-                    let ptr = unsafe {
-                        std::slice::from_raw_parts(
-                            &addr6 as *const _ as *const u8,
-                            std::mem::size_of_val(&addr6),
-                        )
-                    };
-
-                    buf.put_u8(ATYP_IPV4);
-                    buf.put(&ptr[8..24]);
-                    buf.put(&ptr[2..4]);
+                std::net::SocketAddr::V6(addr) => {
+                    buf.put_u8(ATYP_IPV6);
+                    buf.put(addr.ip().octets()[..].as_ref());
+                    buf.put_u16(addr.port());
                 }
             }
         }
