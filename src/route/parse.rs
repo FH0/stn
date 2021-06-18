@@ -47,7 +47,6 @@ pub(crate) struct Route {
     pub(crate) sport: Vec<usize>,
     pub(crate) daddr: RouteAddr,
     pub(crate) dport: Vec<usize>,
-    #[allow(dead_code)]
     pub(crate) dns_domain: RouteAddr,
 
     pub(crate) jump: Arc<dyn Out + Send + Sync>,

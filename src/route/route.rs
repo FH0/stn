@@ -7,6 +7,7 @@ use lazy_static::lazy_static;
 use log::*;
 use parking_lot::RwLock;
 use std::{net::IpAddr, sync::Arc};
+use trust_dns_proto::op::Message;
 
 lazy_static! {
     pub(crate) static ref OUT: RwLock<Vec<Arc<dyn Out + Send + Sync>>> = RwLock::new(Vec::new());
@@ -18,7 +19,7 @@ pub(crate) fn find_out(
     network: String,
     saddr: String,
     daddr: String,
-    _udp_buf: &[u8],
+    udp_buf: &[u8],
 ) -> Arc<dyn Out + Send + Sync> {
     for route_iter in &*ROUTE.read() {
         if route_iter.tag.len() != 0 && !route_iter.tag.contains(&tag) {
@@ -61,13 +62,16 @@ pub(crate) fn find_out(
 
         // dns_domain
         if network.as_str() == "udp" {
-            // if let Ok(dns_parse) = badns::DNS::from_buf(udp_buf) {
-            //     if dns_parse.questions.len() > 0
-            //         && !match_route_addr(&route_iter.dns_domain, &dns_parse.questions[0].name)
-            //     {
-            //         continue;
-            //     }
-            // }
+            if let Ok(dns_msg) = Message::from_vec(udp_buf) {
+                if dns_msg.queries().len() > 0
+                    && !dns_msg
+                        .queries()
+                        .into_iter()
+                        .any(|x| match_route_addr(&route_iter.dns_domain, &x.name().to_utf8()))
+                {
+                    continue;
+                }
+            };
         }
 
         return route_iter.jump.clone();
