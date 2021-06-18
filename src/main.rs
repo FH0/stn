@@ -1,9 +1,8 @@
-// mod dns;
+mod dns;
 // mod drop;
+mod http;
 mod misc;
 mod origin;
-// mod resolve;
-mod http;
 mod route;
 mod socks5;
 #[cfg(feature = "private")]

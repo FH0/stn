@@ -38,9 +38,9 @@ log = "0.4"
 
 bytes = "1" # big/little endian
 
-# badns = { path="../badns", version = "*" }
-
-# lru = "0.6" # dns result cache
+# dns
+trust-dns-proto = { version = "0.20", default-features = false }
+lru = "0.6"
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 libc = "0.2"
