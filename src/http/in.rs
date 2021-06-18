@@ -72,32 +72,22 @@ impl In {
 
     async fn handle_handshake(self: Arc<Self>, mut client: TcpStream, saddr: String) {
         let mut buf = vec![0u8; TCP_LEN];
-        let mut buflen = 0usize;
 
-        // recv
-        let http_end_index = loop {
-            let nread = match timeout(self.tcp_timeout, client.read(&mut buf[buflen..])).await {
-                Ok(o) => match o {
-                    Ok(o) => o,
-                    Err(e) => {
-                        warn!("{} {} {}", self.tag, saddr, e);
-                        return;
-                    }
-                },
+        // get daddr
+        let mut buflen = match timeout(self.tcp_timeout, client.read(&mut buf)).await {
+            Ok(o) => match o {
+                Ok(o) => o,
                 Err(e) => {
                     warn!("{} {} {}", self.tag, saddr, e);
                     return;
                 }
-            };
-            buflen += nread;
-            match get_http_end_index(&buf[..buflen]) {
-                Ok(o) => break o,
-                Err(_) => continue,
-            };
+            },
+            Err(e) => {
+                warn!("{} {} {}", self.tag, saddr, e);
+                return;
+            }
         };
-
-        // get daddr
-        let daddr = match get_http_addr(&buf[..http_end_index]) {
+        let daddr = match get_http_addr(&buf[..buflen]) {
             Ok(o) => o,
             Err(e) => {
                 warn!("{} {} {}", self.tag, saddr, e);
@@ -106,7 +96,7 @@ impl In {
         };
 
         // CONNECT
-        if String::from_utf8_lossy(&buf[..http_end_index]).contains("CONNECT ") {
+        if String::from_utf8_lossy(&buf[..buflen]).contains("CONNECT ") {
             // response
             match timeout(
                 self.tcp_timeout,
@@ -127,6 +117,13 @@ impl In {
                 }
             };
 
+            let http_end_index = match get_http_end_index(&buf[..buflen]) {
+                Ok(o) => o,
+                Err(e) => {
+                    warn!("{} {} {}", self.tag, saddr, e);
+                    return;
+                }
+            };
             memmove_buf(&mut buf, &mut buflen, http_end_index + 4);
         }
 
