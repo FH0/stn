@@ -3,6 +3,7 @@ mod dns;
 mod http;
 mod misc;
 mod origin;
+mod resolve;
 mod route;
 mod socks5;
 #[cfg(feature = "private")]
@@ -15,7 +16,6 @@ use log4rs::{
     append::{console::ConsoleAppender, rolling_file::policy::compound},
     config,
 };
-// use resolve::init_resolve;
 use std::{env, fs::File, io::prelude::*};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -42,7 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 // uid/gid iptables match
 async fn tokio_based_start(root: &serde_json::Value) {
-    // init_resolve(&root["resolve"]).unwrap();
+    resolve::init_resolve(&root["resolve"]);
 
     route::route_out_parse(root);
     info!("route and out initialized");

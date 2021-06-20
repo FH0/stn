@@ -78,7 +78,8 @@ impl crate::route::OutUdp for super::Out {
                         multi_daddr_map.insert(dns_msg.queries().to_vec(), daddr.clone());
 
                         // write server
-                        for daddr in &self_clone.server {
+                        let daddrs = self_clone.server.read().clone();
+                        for daddr in daddrs {
                             debug!(
                                 "{} {} -> {} {}",
                                 self_clone.tag,

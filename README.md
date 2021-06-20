@@ -8,7 +8,7 @@ This project makes your network full of possibilities.
 git clone https://github.com/FH0/stn.git
 cd stn
 cargo update
-cargo build --bin stn --release
+cargo build --no-default-features --bin stn --release
 ```
 
 The compiled file is `target/release/stn`.
@@ -20,9 +20,8 @@ The compiled file is `target/release/stn`.
 
 ## Todo
 
-- [ ] `sniff` out, get http and https domain from tcp stream
-- [ ] `resolve` and `dns` out
-- [ ] `origin` in, like dns packet, needn't daddr
-- [ ] `redirect` out, like iptables DNAT
 - [ ] `drop` out, like iptables DROP
+- [ ] `origin` in, for example: dns packet needn't daddr
+- [ ] `sniff` out, get http and https domain from tcp stream
+- [ ] `redirect` out, like iptables DNAT
 - [ ] `tun` in
