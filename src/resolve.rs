@@ -227,7 +227,7 @@ pub(crate) async fn resolve(domain: &String) -> Result<String, Box<dyn std::erro
                             // cache
                             unsafe {
                                 RESOLVE.as_ref().unwrap().cache.lock().put(
-                                    domain.to_string(),
+                                    format!("{}:{}", addr.to_string(), port),
                                     LruCacheValue {
                                         answer: addr.to_string(),
                                         deadline: tokio::time::Instant::now()
@@ -238,7 +238,7 @@ pub(crate) async fn resolve(domain: &String) -> Result<String, Box<dyn std::erro
 
                             return Ok(format!("{}:{}", addr.to_string(), port));
                         } else {
-                            cache_second.replace(addr.to_string());
+                            cache_second.replace(format!("{}:{}", addr.to_string(), port));
                         }
                     }
                     RData::AAAA(addr) => {
@@ -261,7 +261,7 @@ pub(crate) async fn resolve(domain: &String) -> Result<String, Box<dyn std::erro
                                 RESOLVE.as_ref().unwrap().cache.lock().put(
                                     domain.to_string(),
                                     LruCacheValue {
-                                        answer: addr.to_string(),
+                                        answer: format!("{}:{}", addr.to_string(), port),
                                         deadline: tokio::time::Instant::now()
                                             + Duration::from_secs(ttl),
                                     },
@@ -270,7 +270,7 @@ pub(crate) async fn resolve(domain: &String) -> Result<String, Box<dyn std::erro
 
                             return Ok(format!("{}:{}", addr.to_string(), port));
                         } else {
-                            cache_second.replace(addr.to_string());
+                            cache_second.replace(format!("{}:{}", addr.to_string(), port));
                         }
                     }
                     _ => continue,
@@ -281,6 +281,11 @@ pub(crate) async fn resolve(domain: &String) -> Result<String, Box<dyn std::erro
         Err::<String, Box<dyn std::error::Error>>("channel close".into())
     })
     .await?;
+
+    // abort tasks
+    for task in tasks {
+        task.abort();
+    }
 
     if let Ok(o) = &r {
         debug!("{}:{} resolve to {}", domain, port, o);
