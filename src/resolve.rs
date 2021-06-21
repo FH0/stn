@@ -283,7 +283,7 @@ pub(crate) async fn resolve(domain: &String) -> Result<String, Box<dyn std::erro
     .await?;
 
     if let Ok(o) = &r {
-        debug!("{} resolve to {}", domain, o);
+        debug!("{}:{} resolve to {}", domain, port, o);
     }
 
     r
