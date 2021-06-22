@@ -1,4 +1,7 @@
-use crate::{misc::socketaddr_to_string, origin::UDP_LEN};
+use crate::{
+    misc::{build_socketaddrv6, socketaddr_to_string},
+    origin::UDP_LEN,
+};
 use log::*;
 use std::sync::Arc;
 use tokio::sync::mpsc::channel;
@@ -49,9 +52,16 @@ impl crate::route::OutUdp for super::Out {
                             continue;
                         }
                     };
-                    if let Err(e) = server.send_to(&recv_data, daddr_ip).await {
+                    let daddr_ipv6 = match build_socketaddrv6(daddr_ip) {
+                        Ok(o) => o,
+                        Err(e) => {
+                            warn!("{} {} -> {} {}", self_clone.tag, saddr, daddr, e);
+                            continue;
+                        }
+                    };
+                    if let Err(e) = server.send_to(&recv_data, daddr_ipv6).await {
                         warn!("{} {} -> {} {}", self_clone.tag, saddr, daddr, e);
-                        break;
+                        continue;
                     }
 
                     // update timer

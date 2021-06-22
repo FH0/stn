@@ -119,6 +119,7 @@ pub(crate) async fn resolve(domain: &String) -> Result<String, Box<dyn std::erro
             if tokio::time::Instant::now() > s.deadline {
                 cache_lock.pop(&domain);
             } else {
+                debug!("{}:{} resolve to {}:{}", domain, port, s.answer, port);
                 return Ok(format!("{}:{}", s.answer, port));
             }
         }
@@ -198,7 +199,11 @@ pub(crate) async fn resolve(domain: &String) -> Result<String, Box<dyn std::erro
             if ((unsafe { RESOLVE.as_ref().unwrap().ipv6_first == false } && dns_msg.id() == 4)
                 || (unsafe { RESOLVE.as_ref().unwrap().ipv6_first } && dns_msg.id() == 6))
                 && (dns_msg.response_code() != ResponseCode::NoError
-                    || dns_msg.answers().len() == 0)
+                    || !dns_msg.answers().iter().any(|x| match x.rdata() {
+                        RData::A(_) => true,
+                        RData::AAAA(_) => true,
+                        _ => false,
+                    }))
             {
                 if let Some(s) = cache_second {
                     return Ok(s);
@@ -207,67 +212,59 @@ pub(crate) async fn resolve(domain: &String) -> Result<String, Box<dyn std::erro
                 }
             }
 
-            if dns_msg.answers().len() >= 1 {
-                match dns_msg.answers()[0].rdata() {
+            for answer in dns_msg.answers() {
+                match answer.rdata() {
                     RData::A(addr) => {
+                        // ttl
+                        let ttl = if answer.ttl() < unsafe { RESOLVE.as_ref().unwrap().min_ttl } {
+                            unsafe { RESOLVE.as_ref().unwrap().min_ttl }
+                        } else if answer.ttl() > unsafe { RESOLVE.as_ref().unwrap().max_ttl } {
+                            unsafe { RESOLVE.as_ref().unwrap().max_ttl }
+                        } else {
+                            answer.ttl()
+                        } as u64;
+
+                        // cache
+                        unsafe {
+                            RESOLVE.as_ref().unwrap().cache.lock().put(
+                                domain.to_string(),
+                                LruCacheValue {
+                                    answer: addr.to_string(),
+                                    deadline: tokio::time::Instant::now()
+                                        + Duration::from_secs(ttl),
+                                },
+                            );
+                        }
+
                         if unsafe { RESOLVE.as_ref().unwrap().ipv6_first == false } || wrong_first {
-                            // ttl
-                            let ttl = if dns_msg.answers()[0].ttl()
-                                < unsafe { RESOLVE.as_ref().unwrap().min_ttl }
-                            {
-                                unsafe { RESOLVE.as_ref().unwrap().min_ttl }
-                            } else if dns_msg.answers()[0].ttl()
-                                > unsafe { RESOLVE.as_ref().unwrap().max_ttl }
-                            {
-                                unsafe { RESOLVE.as_ref().unwrap().max_ttl }
-                            } else {
-                                dns_msg.answers()[0].ttl()
-                            } as u64;
-
-                            // cache
-                            unsafe {
-                                RESOLVE.as_ref().unwrap().cache.lock().put(
-                                    format!("{}:{}", addr.to_string(), port),
-                                    LruCacheValue {
-                                        answer: addr.to_string(),
-                                        deadline: tokio::time::Instant::now()
-                                            + Duration::from_secs(ttl),
-                                    },
-                                );
-                            }
-
                             return Ok(format!("{}:{}", addr.to_string(), port));
                         } else {
                             cache_second.replace(format!("{}:{}", addr.to_string(), port));
                         }
                     }
                     RData::AAAA(addr) => {
+                        // ttl
+                        let ttl = if answer.ttl() < unsafe { RESOLVE.as_ref().unwrap().min_ttl } {
+                            unsafe { RESOLVE.as_ref().unwrap().min_ttl }
+                        } else if answer.ttl() > unsafe { RESOLVE.as_ref().unwrap().max_ttl } {
+                            unsafe { RESOLVE.as_ref().unwrap().max_ttl }
+                        } else {
+                            answer.ttl()
+                        } as u64;
+
+                        // cache
+                        unsafe {
+                            RESOLVE.as_ref().unwrap().cache.lock().put(
+                                domain.to_string(),
+                                LruCacheValue {
+                                    answer: addr.to_string(),
+                                    deadline: tokio::time::Instant::now()
+                                        + Duration::from_secs(ttl),
+                                },
+                            );
+                        }
+
                         if unsafe { RESOLVE.as_ref().unwrap().ipv6_first } || wrong_first {
-                            // ttl
-                            let ttl = if dns_msg.answers()[0].ttl()
-                                < unsafe { RESOLVE.as_ref().unwrap().min_ttl }
-                            {
-                                unsafe { RESOLVE.as_ref().unwrap().min_ttl }
-                            } else if dns_msg.answers()[0].ttl()
-                                > unsafe { RESOLVE.as_ref().unwrap().max_ttl }
-                            {
-                                unsafe { RESOLVE.as_ref().unwrap().max_ttl }
-                            } else {
-                                dns_msg.answers()[0].ttl()
-                            } as u64;
-
-                            // cache
-                            unsafe {
-                                RESOLVE.as_ref().unwrap().cache.lock().put(
-                                    domain.to_string(),
-                                    LruCacheValue {
-                                        answer: format!("{}:{}", addr.to_string(), port),
-                                        deadline: tokio::time::Instant::now()
-                                            + Duration::from_secs(ttl),
-                                    },
-                                );
-                            }
-
                             return Ok(format!("{}:{}", addr.to_string(), port));
                         } else {
                             cache_second.replace(format!("{}:{}", addr.to_string(), port));

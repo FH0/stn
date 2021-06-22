@@ -110,7 +110,6 @@ pub(crate) fn build_socket_listener(
     Ok(listener)
 }
 
-#[allow(dead_code)]
 #[inline]
 pub(crate) fn build_socketaddrv6(
     target: impl ToSocketAddrs,
