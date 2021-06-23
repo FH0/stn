@@ -45,6 +45,8 @@ bytes = "1" # big/little endian
 trust-dns-proto = { version = "0.20", default-features = false }
 lru = "0.6"
 
+cfg-if = "1.0"
+
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 libc = "0.2"
 pnet = "0.27"

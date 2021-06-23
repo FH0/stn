@@ -1,46 +1,27 @@
+use super::get_server_and_refresh_system;
 use crate::route::OutUdp;
 use log::*;
 use parking_lot::{Mutex, RwLock};
-use std::{sync::Arc, time::Duration};
-use tokio::{sync::mpsc::channel, task::JoinHandle, time::sleep};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
+use tokio::{sync::mpsc::channel, task::JoinHandle};
 use trust_dns_proto::op::{Message, MessageType, Query};
-
-#[derive(Clone, Debug)]
-pub(crate) struct LruCacheValue {
-    pub(crate) message: Message,
-    pub(crate) deadline: tokio::time::Instant,
-}
 
 pub(crate) struct Out {
     pub(crate) tag: String,
-    pub(crate) server: RwLock<Vec<String>>,
+    pub(crate) server: Arc<RwLock<Vec<SocketAddr>>>,
     pub(crate) udp_timeout: Duration,
     pub(crate) min_ttl: u32,
     pub(crate) max_ttl: u32,
-    pub(crate) cache: Mutex<lru::LruCache<Vec<Query>, LruCacheValue>>,
+    pub(crate) cache: Mutex<lru::LruCache<Vec<Query>, (Message, tokio::time::Instant)>>,
 }
 
 impl Out {
     pub(crate) fn new(root: &serde_json::Value) -> Arc<dyn crate::route::Out + Send + Sync> {
-        let server = root["server"].as_array();
-        let mut server = match server {
-            Some(s) => s
-                .into_iter()
-                .map(|x| {
-                    let x_str = x.as_str().expect("server not string");
-                    if x_str.contains(":") || x_str == "system" {
-                        x_str.to_string()
-                    } else {
-                        format!("{}:53", x_str)
-                    }
-                })
-                .collect(),
-            None => vec!["system".to_string()],
-        };
+        let server = get_server_and_refresh_system(&root);
 
         let out = Arc::new(Self {
             tag: root["tag"].as_str().expect("tag not found").to_string(),
-            server: RwLock::new(server.clone()),
+            server,
             udp_timeout: Duration::from_nanos(
                 (root["udp_timeout"].as_f64().unwrap_or_else(|| 60f64) * 1000_000_000f64) as u64,
             ),
@@ -51,91 +32,12 @@ impl Out {
             )),
         });
 
-        // refresh system
-        #[allow(unreachable_code)]
-        for _ in 0..1 {
-            if server.contains(&"system".to_string()) {
-                // remove system
-                server.retain(|x| x.as_str() != "system");
-
-                #[cfg(any(target_os = "windows", target_os = "android", target_os = "linux"))]
-                {
-                    if let Err(e) = out.clone().refresh_system(server.clone()) {
-                        warn!("{}", e);
-                    };
-                    let interval = Duration::from_nanos(
-                        (root["refresh_system"].as_f64().unwrap_or_else(|| 3f64) * 1000_000_000f64)
-                            as _,
-                    );
-                    if interval != Duration::new(0, 0) {
-                        tokio::spawn({
-                            let out = out.clone();
-                            async move {
-                                loop {
-                                    sleep(interval).await;
-                                    if let Err(e) = out.clone().refresh_system(server.clone()) {
-                                        warn!("{}", e);
-                                    };
-                                }
-                            }
-                        });
-                    }
-
-                    break;
-                }
-
-                panic!("unsupport system");
-            }
-        }
-
         // refresh_cache
         if root["refresh_cache"].as_bool().unwrap_or_else(|| false) {
             tokio::spawn(out.clone().refresh_cache());
         }
 
         out
-    }
-
-    fn refresh_system(
-        self: Arc<Self>,
-        mut origin_server: Vec<String>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        #[cfg(target_os = "windows")]
-        for adapter in ipconfig::get_adapters()? {
-            for server in adapter.dns_servers() {
-                origin_server.push(format!("{}:53", server));
-            }
-        }
-        #[cfg(target_os = "android")]
-        for i in 1..5 {
-            let server_string = String::from_utf8_lossy(
-                &std::process::Command::new("/system/bin/getprop")
-                    .arg(&format!("net.dns{}", i))
-                    .output()?
-                    .stdout,
-            )
-            .trim()
-            .to_string();
-            if !server_string.is_empty() {
-                origin_server.push(format!("{}:53", server_string));
-            }
-        }
-        #[cfg(target_os = "linux")]
-        {
-            let buf = std::fs::read_to_string("/etc/resolv.conf")?;
-            let config = resolv_conf::Config::parse(buf)?;
-            for elem in config.nameservers {
-                origin_server.push(format!("{}:53", elem));
-            }
-        }
-
-        // dedup
-        origin_server.sort_unstable();
-        origin_server.dedup();
-
-        self.server.write().splice(.., origin_server);
-
-        Ok(())
     }
 
     async fn refresh_cache(self: Arc<Self>) {
@@ -164,8 +66,8 @@ impl Out {
 
             // get refresh list
             let mut queries = Vec::new();
-            for (k, v) in &*self.cache.lock() {
-                if tokio::time::Instant::now() + interval > v.deadline {
+            for (k, (_, deadline)) in &*self.cache.lock() {
+                if tokio::time::Instant::now() + interval > *deadline {
                     queries.push(k.clone());
                 }
             }

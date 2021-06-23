@@ -1,4 +1,3 @@
-use crate::dns::out::LruCacheValue;
 use log::*;
 use std::{sync::Arc, time::Duration};
 use tokio::sync::mpsc::{channel, Sender};
@@ -48,7 +47,8 @@ impl crate::route::OutUdp for super::Out {
                     let lru_cache_value_option =
                         match self_clone.cache.lock().get(&dns_msg.queries().to_vec()) {
                             Some(s) => {
-                                if tokio::time::Instant::now() <= s.deadline {
+                                // compare deadline
+                                if tokio::time::Instant::now() <= s.1 {
                                     Some(s.clone())
                                 } else {
                                     None
@@ -56,12 +56,12 @@ impl crate::route::OutUdp for super::Out {
                             }
                             None => None,
                         };
-                    if let Some(mut lru_cache_value) = lru_cache_value_option {
+                    if let Some((mut message, _)) = lru_cache_value_option {
                         // fake id
-                        lru_cache_value.message.set_id(dns_msg.id());
+                        message.set_id(dns_msg.id());
 
                         // write client
-                        let buf = match lru_cache_value.message.to_vec() {
+                        let buf = match message.to_vec() {
                             Ok(o) => o,
                             Err(e) => {
                                 warn!("{} {} -> {} {}", self_clone.tag, saddr, daddr, e);
@@ -87,7 +87,8 @@ impl crate::route::OutUdp for super::Out {
                                 daddr,
                                 recv_data.len()
                             );
-                            if let Err(_) = server_tx.send((daddr.clone(), recv_data.clone())).await
+                            if let Err(_) =
+                                server_tx.send((daddr.to_string(), recv_data.clone())).await
                             {
                                 debug!("{} {} -> {} close", self_clone.tag, saddr, daddr);
                                 break;
@@ -156,11 +157,10 @@ impl crate::route::OutUdp for super::Out {
                         let mut cache_lock = self_clone.cache.lock();
                         cache_lock.put(
                             dns_msg.queries().to_vec(),
-                            LruCacheValue {
-                                message: dns_msg.clone(),
-                                deadline: tokio::time::Instant::now()
-                                    + Duration::from_secs(last_ttl),
-                            },
+                            (
+                                dns_msg.clone(),
+                                tokio::time::Instant::now() + Duration::from_secs(last_ttl),
+                            ),
                         );
                     }
                     debug!("{} {} -> {} {}", self_clone.tag, daddr, saddr, buf.len());
