@@ -25,3 +25,7 @@ The compiled file is `target/release/stn`.
 - `sniff` out, get http and https domain from tcp stream
 - `redirect` out, like iptables DNAT
 - `tun` in
+
+## Script
+
+- bat script to set http proxy
