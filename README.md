@@ -20,6 +20,7 @@ The compiled file is `target/release/stn`.
 
 ## Todo
 
+- Github Actions
 - `drop` out, like iptables DROP
 - `origin` in, for example: dns packet needn't daddr
 - `sniff` out, get http and https domain from tcp stream
