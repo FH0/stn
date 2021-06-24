@@ -105,6 +105,10 @@
       "refresh_cache": false, // default false
       "min_ttl": 60, // default 60
       "max_ttl": 2147483647 // default 2147483647
+    },
+    {
+      "tag": "drop", // like iptables DROP
+      "protocol": "drop"
     }
   ],
   "route": [

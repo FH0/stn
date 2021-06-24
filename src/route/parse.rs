@@ -62,7 +62,7 @@ pub(crate) fn route_out_parse(root: &serde_json::Value) {
             "stn" => stn::Out::new(iter),
             "socks5" => socks5::Out::new(iter),
             "http" => http::Out::new(iter),
-            // "drop" => Out::Drop(drop::Out::new(iter)),
+            "drop" => drop::Out::new(iter),
             "dns" => dns::Out::new(iter),
             protocol => panic!("protocol not support: {:?}", protocol),
         };

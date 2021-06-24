@@ -1,5 +1,5 @@
 mod dns;
-// mod drop;
+mod drop;
 mod http;
 mod misc;
 mod origin;
