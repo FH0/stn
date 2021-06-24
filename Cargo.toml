@@ -38,12 +38,16 @@ futures = "0.3"
 
 log4rs = "0.13"
 log = "0.4"
-
-bytes = "1" # big/little endian
+ 
+# big/little endian
+bytes = "1"
 
 # dns
 trust-dns-proto = { version = "0.20", default-features = false }
 lru = "0.6"
+
+# check domain valid
+addr = "0.14"
 
 cfg-if = "1.0"
 

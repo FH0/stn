@@ -1,3 +1,4 @@
+use addr::{parser::DomainName, psl::List};
 use socket2::Socket;
 use std::{
     net::{SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
@@ -159,4 +160,18 @@ pub(crate) fn set_nodelay_keepalive_interval(
     result2?;
 
     Ok(tokio::net::TcpStream::from_std(socket2_socket.into())?)
+}
+
+#[inline]
+pub(crate) fn is_valid_domain(domain: &str) -> bool {
+    List.parse_domain_name(domain).is_ok()
+}
+
+#[test]
+fn test_valid_domain() {
+    assert_eq!(is_valid_domain("a.com"), true);
+    assert_eq!(is_valid_domain("a.com."), true);
+    assert_eq!(is_valid_domain("a..com"), false);
+    assert_eq!(is_valid_domain(".a.com"), false);
+    assert_eq!(is_valid_domain("a.c"), false);
 }

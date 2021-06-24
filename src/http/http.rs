@@ -1,3 +1,5 @@
+use crate::misc::is_valid_domain;
+
 pub(crate) const TCP_LEN: usize = 8192;
 
 #[inline]
@@ -21,26 +23,28 @@ pub(crate) fn get_http_end_index(buf: &[u8]) -> Result<usize, Box<dyn std::error
 
 #[inline]
 pub(crate) fn get_http_addr(buf: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
+    // get addr
     let buf_string = String::from_utf8_lossy(buf);
-    let buf_string_split = buf_string.split(" ").collect::<Vec<&str>>();
-    let raw_addr = buf_string_split.get(1).ok_or("invalid http header")?;
-
+    let raw_addr = buf_string.split(" ").nth(1).ok_or("invalid http header")?;
     let result = if raw_addr.contains("http://") {
-        raw_addr
-            .split("/")
-            .collect::<Vec<&str>>()
-            .get(2)
-            .ok_or("invalid http header")?
-            .to_string()
+        raw_addr.split("/").nth(2).ok_or("invalid http header")?
     } else {
-        raw_addr.to_string()
+        raw_addr
     };
 
-    Ok(if result.contains(":") {
-        result
+    // add port
+    let result = if result.contains(":") {
+        result.to_string()
     } else {
         format!("{}:80", result)
-    })
+    };
+
+    // check validity
+    if !is_valid_domain(result.split(":").nth(0).unwrap()) {
+        Err("invalid domain")?
+    }
+
+    Ok(result)
 }
 
 #[test]
