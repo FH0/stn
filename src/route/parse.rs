@@ -101,50 +101,7 @@ pub(crate) fn route_out_parse(root: &serde_json::Value) {
     }
 }
 
-fn parse_addr(elems: &Vec<String>) -> RouteAddr {
-    #[inline]
-    fn read_to_vec(
-        elem: &String,
-        full_vec: &mut Vec<String>,
-        substring_vec: &mut Vec<String>,
-        domain_vec: &mut Vec<String>,
-        cidr4: &mut IpLookupTable<Ipv4Addr, ()>,
-        cidr6: &mut IpLookupTable<Ipv6Addr, ()>,
-        regex_vec: &mut Vec<String>,
-    ) {
-        let mut addr_iter = elem.as_str().split_whitespace();
-        match addr_iter.next().expect("invalid route addr") {
-            "full" => full_vec.push(format!(
-                " {} ",
-                addr_iter.next().expect("invalid route addr")
-            )),
-            "substring" => {
-                substring_vec.push(addr_iter.next().expect("invalid route addr").to_string())
-            }
-            "domain" => domain_vec.push(format!(
-                " {} ",
-                addr_iter.next().expect("invalid route addr")
-            )),
-            "cidr" => {
-                let cidr_vec: Vec<&str> = addr_iter
-                    .next()
-                    .expect("invalid route cidr")
-                    .split('/')
-                    .collect();
-                match cidr_vec[0].parse::<IpAddr>().expect("invalid route cidr") {
-                    IpAddr::V4(ip) => {
-                        cidr4.insert(ip, cidr_vec[1].parse().expect("invalid route cidr"), ());
-                    }
-                    IpAddr::V6(ip) => {
-                        cidr6.insert(ip, cidr_vec[1].parse().expect("invalid route cidr"), ());
-                    }
-                }
-            }
-            "regex" => regex_vec.push(addr_iter.next().expect("invalid route addr").to_string()),
-            invalid => warn!("{} not support", invalid),
-        };
-    }
-
+fn parse_addr(addrs: &Vec<String>) -> RouteAddr {
     let mut full_vec = Vec::new();
     let mut substring_vec = Vec::new();
     let mut domain_vec = Vec::new();
@@ -152,34 +109,78 @@ fn parse_addr(elems: &Vec<String>) -> RouteAddr {
     let mut cidr6 = IpLookupTable::new();
     let mut regex_vec = Vec::new();
 
-    for elem in elems {
-        if elem.contains("file ") {
-            let file = std::fs::File::open(elem[5..].to_string())
-                .expect(format!("failed to open {}", elem[5..].to_string()).as_str());
-            for line in std::io::BufReader::new(file).lines() {
-                match line {
-                    Ok(line) => read_to_vec(
-                        &line,
-                        &mut full_vec,
-                        &mut substring_vec,
-                        &mut domain_vec,
-                        &mut cidr4,
-                        &mut cidr6,
-                        &mut regex_vec,
-                    ),
-                    Err(e) => warn!("{}", e),
-                }
-            }
+    for addr in addrs {
+        let single_addr_vec = if addr.contains("file ") {
+            let file = std::fs::File::open(addr[5..].to_string())
+                .expect(format!("failed to open {}", addr[5..].to_string()).as_str());
+            std::io::BufReader::new(file)
+                .lines()
+                .map(|x| x.unwrap())
+                .collect()
         } else {
-            read_to_vec(
-                elem,
-                &mut full_vec,
-                &mut substring_vec,
-                &mut domain_vec,
-                &mut cidr4,
-                &mut cidr6,
-                &mut regex_vec,
-            )
+            vec![addr.clone()]
+        };
+
+        for single_addr in single_addr_vec {
+            let mut single_addr_split = single_addr.split_whitespace();
+            match single_addr_split.next().expect("invalid route addr") {
+                "full" => full_vec.push(format!(
+                    " {} ",
+                    single_addr_split.next().expect("invalid route addr")
+                )),
+                "substring" => substring_vec.push(
+                    single_addr_split
+                        .next()
+                        .expect("invalid route addr")
+                        .to_string(),
+                ),
+                "domain" => domain_vec.push(format!(
+                    " {} ",
+                    single_addr_split.next().expect("invalid route addr")
+                )),
+                "cidr" => {
+                    let mut cidr_split = single_addr_split
+                        .next()
+                        .expect("invalid route addr")
+                        .split("/");
+                    match cidr_split
+                        .next()
+                        .expect("invalid route cidr")
+                        .parse::<IpAddr>()
+                        .expect("invalid route cidr")
+                    {
+                        IpAddr::V4(ip) => {
+                            cidr4.insert(
+                                ip,
+                                cidr_split
+                                    .next()
+                                    .expect("invalid route cidr")
+                                    .parse()
+                                    .expect("invalid route cidr"),
+                                (),
+                            );
+                        }
+                        IpAddr::V6(ip) => {
+                            cidr6.insert(
+                                ip,
+                                cidr_split
+                                    .next()
+                                    .expect("invalid route cidr")
+                                    .parse()
+                                    .expect("invalid route cidr"),
+                                (),
+                            );
+                        }
+                    }
+                }
+                "regex" => regex_vec.push(
+                    single_addr_split
+                        .next()
+                        .expect("invalid route addr")
+                        .to_string(),
+                ),
+                invalid => warn!("{} not support", invalid),
+            };
         }
     }
 
@@ -190,6 +191,6 @@ fn parse_addr(elems: &Vec<String>) -> RouteAddr {
         cidr4,
         cidr6,
         regex: regex::RegexSet::new(regex_vec).expect("can't generate RegexSet"),
-        empty: elems.len() == 0,
+        empty: addrs.len() == 0,
     }
 }
