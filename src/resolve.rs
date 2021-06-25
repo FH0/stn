@@ -1,4 +1,7 @@
-use crate::{dns::get_server_and_refresh_system, misc::split_addr_str};
+use crate::{
+    dns::get_server_and_refresh_system,
+    misc::{is_valid_domain, split_addr_str},
+};
 use log::*;
 use parking_lot::{Mutex, RwLock};
 use std::{
@@ -66,6 +69,11 @@ pub(crate) async fn resolve(addr_str: &String) -> Result<String, Box<dyn std::er
     // if ip addr
     if domain.parse::<IpAddr>().is_ok() {
         return Ok(format!("{}:{}", domain, port));
+    }
+
+    // if domain
+    if !is_valid_domain(&domain) {
+        Err(format!("invalid domain: {}", domain))?
     }
 
     // search cache
