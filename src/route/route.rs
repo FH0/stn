@@ -63,11 +63,10 @@ pub(crate) fn find_out(
         // dns_domain
         if network.as_str() == "udp" {
             if let Ok(dns_msg) = Message::from_vec(udp_buf) {
-                if dns_msg.queries().len() > 0
-                    && !dns_msg
-                        .queries()
-                        .into_iter()
-                        .any(|x| match_route_addr(&route_iter.dns_domain, &x.name().to_utf8()))
+                if !dns_msg
+                    .queries()
+                    .into_iter()
+                    .any(|x| match_route_addr(&route_iter.dns_domain, &x.name().to_utf8()))
                 {
                     continue;
                 }
@@ -87,7 +86,8 @@ fn match_route_addr(route_addr: &RouteAddr, match_obj: &String) -> bool {
         || route_addr.full.is_match(format!(" {} ", match_obj))
         || route_addr.substring.is_match(match_obj)
         || {
-            let domain_vec: Vec<&str> = match_obj.split('.').collect();
+            let mut domain_vec: Vec<&str> = match_obj.split('.').collect();
+            domain_vec.retain(|x| !x.is_empty());
 
             for index in 0..domain_vec.len() {
                 if route_addr

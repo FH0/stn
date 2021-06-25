@@ -216,7 +216,7 @@ impl In {
                 loop {
                     tokio::select! {
                         _ = tokio::time::sleep(self.udp_timeout) => {
-                            warn!("{} {} timeout", self.tag, saddr);
+                            debug!("{} {} timeout", self.tag, saddr);
                             break;
                         },
                         exit = exit_or_update_timer_rx.recv() => {
