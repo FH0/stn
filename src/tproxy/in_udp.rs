@@ -47,21 +47,17 @@ impl In {
                 let saddr = socketaddr_to_string(&saddr);
                 let daddr = socketaddr_to_string(&daddr);
 
-                // if not contains, add it
-                if !self.fullcone_map.contains_key(&saddr) {
+                // get server_tx or new a task
+                let server_tx = if let Some(s) = self.fullcone_map.get(&saddr) {
+                    s.value().clone()
+                } else {
                     let (own_tx, own_rx) = channel::<(String, Vec<u8>)>(100);
-                    self.fullcone_map.insert(saddr.clone(), own_tx);
+                    self.fullcone_map.insert(saddr.clone(), own_tx.clone());
                     tokio::spawn(self.clone().handle_tproxy_udp(saddr.clone(), own_rx));
-                }
-
-                // send without blocking, that's why channel has buffer
-                let server_tx = match self.fullcone_map.get(&saddr) {
-                    Some(s) => s,
-                    None => {
-                        warn!("{} {} server_tx is None", self.tag, saddr);
-                        continue;
-                    }
+                    own_tx
                 };
+
+                // send
                 if let Err(e) = server_tx.try_send((daddr, buf[..nrecv].to_vec())) {
                     warn!("{} {} {}", self.tag, saddr, e);
                     continue;
@@ -179,6 +175,9 @@ impl In {
                         },
                     };
                 }
+
+                // delete from fullcone_map
+                self.fullcone_map.remove(&saddr);
 
                 task1.abort();
                 task2.abort();
