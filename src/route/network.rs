@@ -37,7 +37,7 @@ pub(crate) fn udp_bind(
     // dispatch, single src may have multi dst out
     tokio::spawn({
         async move {
-            let mut out_map: HashMap<usize, Sender<(String, Vec<u8>)>> = HashMap::new();
+            let mut fullcone_map: HashMap<usize, Sender<(String, Vec<u8>)>> = HashMap::new();
             let unique_port = Box::new(0u8).as_ref() as *const _ as usize;
 
             // if None recv, return
@@ -52,9 +52,10 @@ pub(crate) fn udp_bind(
                 );
                 let out_usize = out.as_ref() as *const _ as *const usize as usize;
 
-                // if not contains, add it
-                if !out_map.contains_key(&out_usize) {
-                    // give client_tx to server, server send data to client directly
+                // get server_tx or new a task
+                let server_tx = if let Some(s) = fullcone_map.get(&out_usize) {
+                    s.clone()
+                } else {
                     let server_tx = match out
                         .udp_bind(format!("{}:{}", tag, unique_port), client_tx.clone())
                         .await
@@ -65,17 +66,11 @@ pub(crate) fn udp_bind(
                             continue;
                         }
                     };
-                    out_map.insert(out_usize, server_tx);
-                }
-
-                // send without blocking, that's why channel has buffer
-                let server_tx = match out_map.get(&out_usize) {
-                    Some(s) => s,
-                    None => {
-                        warn!("{} {} -> {} server_tx is None", tag, saddr, daddr);
-                        continue;
-                    }
+                    fullcone_map.insert(out_usize, server_tx.clone());
+                    server_tx
                 };
+
+                // send
                 if let Err(e) = server_tx.try_send((daddr.clone(), recv_data)) {
                     warn!("{} {} -> {} {}", tag, saddr, daddr, e);
                     continue;

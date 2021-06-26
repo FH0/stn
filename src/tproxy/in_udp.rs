@@ -58,8 +58,8 @@ impl In {
                 };
 
                 // send
-                if let Err(e) = server_tx.try_send((daddr, buf[..nrecv].to_vec())) {
-                    warn!("{} {} {}", self.tag, saddr, e);
+                if let Err(e) = server_tx.try_send((daddr.clone(), buf[..nrecv].to_vec())) {
+                    warn!("{} {} -> {} {}", self.tag, saddr, daddr, e);
                     continue;
                 }
             }

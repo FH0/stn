@@ -1,4 +1,4 @@
-use addr::{parser::DomainName, psl::List};
+use regex::Regex;
 use socket2::Socket;
 use std::{
     net::{SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
@@ -164,7 +164,10 @@ pub(crate) fn set_nodelay_keepalive_interval(
 
 #[inline]
 pub(crate) fn is_valid_domain(domain: &str) -> bool {
-    List.parse_domain_name(domain).is_ok()
+    lazy_static::lazy_static! {
+        static ref RE: Regex = Regex::new("^([A-Za-z]{1,63}\\.|[A-Za-z][A-Za-z0-9-]{1,61}[A-Za-z]\\.)+[A-Za-z]{2,6}(\\.|)$").unwrap();
+    }
+    RE.is_match(domain)
 }
 
 #[test]
@@ -174,4 +177,5 @@ fn test_valid_domain() {
     assert_eq!(is_valid_domain("a..com"), false);
     assert_eq!(is_valid_domain(".a.com"), false);
     assert_eq!(is_valid_domain("a.c"), false);
+    assert_eq!(is_valid_domain("a"), false);
 }
