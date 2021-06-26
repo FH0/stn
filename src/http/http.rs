@@ -41,7 +41,10 @@ pub(crate) fn get_http_addr(buf: &[u8]) -> Result<String, Box<dyn std::error::Er
 
     // check validity
     if !is_valid_domain(result.split(":").nth(0).unwrap()) {
-        Err("invalid domain")?
+        Err(format!(
+            "invalid domain: {}",
+            result.split(":").nth(0).unwrap()
+        ))?
     }
 
     Ok(result)

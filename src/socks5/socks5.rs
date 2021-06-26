@@ -49,7 +49,7 @@ pub(crate) fn get_daddr(buf: &[u8]) -> Result<(String, usize), Box<dyn std::erro
 
             // check validity
             if !is_valid_domain(domain.as_str()) {
-                Err("invalid domain")?
+                Err(format!("invalid domain: {}", domain))?
             }
 
             Ok((
