@@ -2,7 +2,7 @@ use super::r#in::UDP_LEN;
 use super::In;
 use crate::misc::{sockaddr_to_std, socketaddr_to_string};
 use log::*;
-use pnet::packet::{
+use pnet_packet::{
     ip::IpNextHeaderProtocols,
     ipv4, ipv6,
     udp::{self, MutableUdpPacket},
@@ -291,7 +291,7 @@ impl In {
         let checksum = udp::ipv6_checksum(&udp_header.to_immutable(), &saddr, &daddr);
         udp_header.set_checksum(checksum);
 
-        // dport must 0, it's fuck enough, https://stackoverflow.com/a/47779888/12651220
+        // dport must 0, https://stackoverflow.com/a/47779888/12651220
         let daddr_socketaddr = SocketAddrV6::new(daddr, 0, 0, 0);
         if unsafe {
             libc::sendto(
