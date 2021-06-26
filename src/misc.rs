@@ -165,7 +165,7 @@ pub(crate) fn set_nodelay_keepalive_interval(
 #[inline]
 pub(crate) fn is_valid_domain(domain: &str) -> bool {
     lazy_static::lazy_static! {
-        static ref RE: Regex = Regex::new("^([A-Za-z]{1,63}\\.|[A-Za-z][A-Za-z0-9-]{1,61}[A-Za-z]\\.)+[A-Za-z]{2,6}(\\.|)$").unwrap();
+        static ref RE: Regex = Regex::new("^([A-Za-z0-9]{1,63}\\.|[A-Za-z0-9][A-Za-z0-9-]{1,61}[A-Za-z0-9]\\.)+[A-Za-z]{2,6}(\\.|)$").unwrap();
     }
     RE.is_match(domain)
 }
