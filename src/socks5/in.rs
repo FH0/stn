@@ -102,6 +102,10 @@ impl In {
         // recv
         let nread = match timeout(self.tcp_timeout, client.read(&mut buf)).await {
             Ok(o) => match o {
+                Ok(0) => {
+                    warn!("{} {} close", self.tag, saddr);
+                    return;
+                }
                 Ok(o) => o,
                 Err(e) => {
                     warn!("{} {} {}", self.tag, saddr, e);
@@ -206,6 +210,10 @@ impl In {
         {
             let nread = match timeout(self.tcp_timeout, client.read(&mut buf[buflen..])).await {
                 Ok(o) => match o {
+                    Ok(0) => {
+                        warn!("{} {} close", self.tag, saddr);
+                        return;
+                    }
                     Ok(o) => o,
                     Err(e) => {
                         warn!("{} {} {}", self.tag, saddr, e);
