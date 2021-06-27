@@ -21,7 +21,6 @@ The compiled file is `target/release/stn`.
 ## Todo
 
 - Github Actions
-- `origin` in, for example: dns packet needn't daddr
 - `sniff` out, get http and https domain from tcp stream
 - `redirect` out, like iptables DNAT
 - `tun` in
