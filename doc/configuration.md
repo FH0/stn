@@ -71,6 +71,14 @@
       "tcp_keepalive_interval": 30,
       "tcp_timeout": 300,
       "udp_timeout": 60
+    },
+    {
+      "tag": "origin",
+      "protocol": "origin", // daddr = saddr
+      "tcp_nodelay": true,
+      "tcp_keepalive_interval": 30,
+      "tcp_timeout": 300,
+      "udp_timeout": 60
     }
   ],
   "out": [
