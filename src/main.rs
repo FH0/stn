@@ -43,6 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 // uid/gid iptables match
 async fn tokio_based_start(root: &serde_json::Value) {
     resolve::init_resolve(&root["resolve"]);
+    info!("resolve initialized");
 
     route::route_out_parse(root);
     info!("route and out initialized");
@@ -50,6 +51,7 @@ async fn tokio_based_start(root: &serde_json::Value) {
     for iter in root["in"].as_array().expect("in not found") {
         match iter["protocol"].as_str() {
             Some("http") => tokio::spawn(http::In::start(iter.clone())),
+            Some("origin") => tokio::spawn(origin::In::start(iter.clone())),
             Some("socks5") => tokio::spawn(socks5::In::start(iter.clone())),
             #[cfg(feature = "private")]
             Some("stn") => tokio::spawn(stn::In::start(iter.clone())),
