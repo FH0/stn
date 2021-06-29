@@ -1,10 +1,11 @@
+#[macro_use]
+mod route;
 mod dns;
 mod drop;
 mod http;
 mod misc;
 mod origin;
 mod resolve;
-mod route;
 mod socks5;
 #[cfg(feature = "private")]
 mod stn;

@@ -1,3 +1,4 @@
+#[macro_use]
 mod network;
 mod out;
 mod parse;

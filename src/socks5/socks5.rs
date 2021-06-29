@@ -1,4 +1,4 @@
-use crate::misc::{is_valid_domain, split_addr_str};
+use crate::misc::split_addr_str;
 use bytes::{Buf, BufMut};
 use std::{
     convert::TryInto,
@@ -45,15 +45,13 @@ pub(crate) fn get_daddr(buf: &[u8]) -> Result<(String, usize), Box<dyn std::erro
         }
         ATYP_DOMAIN => {
             let domain_len = buf[1] as usize;
-            let domain = String::from_utf8_lossy(&buf[2..2 + domain_len]).to_string();
-
-            // check validity
-            if !is_valid_domain(domain.as_str()) {
-                Err(format!("invalid domain: {}", domain))?
-            }
 
             Ok((
-                format!("{}:{}", domain, (&buf[2 + domain_len..]).get_u16()),
+                format!(
+                    "{}:{}",
+                    String::from_utf8_lossy(&buf[2..2 + domain_len]).to_string(),
+                    (&buf[2 + domain_len..]).get_u16()
+                ),
                 1 + domain_len,
             ))
         }

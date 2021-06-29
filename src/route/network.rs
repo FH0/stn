@@ -1,5 +1,5 @@
 use crate::route::find_out;
-use log::warn;
+use log::*;
 use std::collections::HashMap;
 use tokio::sync::mpsc::{channel, Sender};
 
@@ -80,4 +80,46 @@ pub(crate) fn udp_bind(
     });
 
     Ok(own_tx)
+}
+
+macro_rules! bidirectional_with_timeout {
+    ($client_block:block, $server_block:block, $timeout:expr) => {{
+        let (timer_tx, mut timer_rx) = tokio::sync::mpsc::channel::<()>(1);
+        tokio::select! {
+            r = async {
+                loop {
+                    $client_block
+
+                    // update timer
+                    timer_tx.send(()).await.or(Err("close"))?;
+                }
+                #[allow(unreachable_code)]
+                Ok::<(), Box<dyn std::error::Error>>(())
+            } => (r, Ok(()), Ok(())),
+            r = async {
+                loop {
+                    $server_block
+
+                    // update timer
+                    timer_tx.send(()).await.or(Err("close"))?;
+                }
+                #[allow(unreachable_code)]
+                Ok::<(), Box<dyn std::error::Error>>(())
+            } => (Ok(()), r, Ok(())),
+            r = async {
+                loop {
+                    tokio::select! {
+                        _ = timer_rx.recv() => continue,
+                        _ = tokio::time::sleep($timeout) => Err("timeout")?,
+                    }
+                }
+                #[allow(unreachable_code)]
+                Ok::<(), Box<dyn std::error::Error>>(())
+            } => (
+                Ok::<(), Box<dyn std::error::Error>>(()), // client_block
+                Ok::<(), Box<dyn std::error::Error>>(()), // server_block
+                r,                                        // timeout
+            ),
+        }
+    }};
 }

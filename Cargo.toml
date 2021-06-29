@@ -1,6 +1,6 @@
 [package]
 name = "stn"
-version = "0.1.2"
+version = "0.1.3"
 authors = [""]
 edition = "2018"
 default-run = "stn"
@@ -23,8 +23,10 @@ async-trait = "0.1"
 lazy_static = "1.4.0"
 cfg-if = "1.0"
 
-dashmap = "4.0" # replace RwLock<HashMap<K, V, S>>
-parking_lot = "0.11" # replace Mutex & RwLock
+# replace RwLock<HashMap<K, V, S>>
+dashmap = "4.0"
+# replace Mutex & RwLock
+parking_lot = "0.11"
 
 # route match
 regex = "1.4"
@@ -38,7 +40,7 @@ futures = "0.3"
 
 log4rs = "0.13"
 log = "0.4"
- 
+
 # big/little endian
 bytes = "1"
 
