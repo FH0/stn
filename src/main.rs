@@ -28,7 +28,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let file = File::open(args[2].as_str())?;
-    let root: serde_json::Value = serde_json::from_reader(file)?;
+    let stripped = json_comments::StripComments::new(file);
+    let root: serde_json::Value = serde_json::from_reader(stripped)?;
 
     do_setting(&root["setting"])?;
     info!("setting done");
