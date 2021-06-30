@@ -116,6 +116,9 @@ impl In {
                 }
                 _ => unreachable!(),
             }
+
+            // delete from fullcone_map
+            self.fullcone_map.remove(&saddr);
         });
     }
 
