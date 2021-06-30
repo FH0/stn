@@ -83,106 +83,38 @@ impl In {
             }
         };
 
-        let (exit_or_update_timer_tx, mut exit_or_update_timer_rx) = channel::<bool>(1);
-        // client
-        let task1 = tokio::spawn({
-            let exit_or_update_timer_tx = exit_or_update_timer_tx.clone();
-            let self_clone = self.clone();
-            let saddr = saddr.clone();
-            async move {
-                loop {
+        tokio::spawn(async move {
+            match bidirectional_with_timeout!(
+                {
                     // read client
-                    let (daddr, recv_data) = match client_rx.recv().await {
-                        Some(s) => s,
-                        None => {
-                            debug!("{} {} close", self_clone.tag, saddr);
-                            break;
-                        }
-                    };
+                    let (daddr, recv_data) = client_rx.recv().await.ok_or("close")?;
 
                     // write server
-                    debug!(
-                        "{} {} -> {} {}",
-                        self_clone.tag,
-                        saddr,
-                        daddr,
-                        recv_data.len()
-                    );
-                    if let Err(_) = server_tx.send((daddr.clone(), recv_data)).await {
-                        debug!("{} {} -> {} close", self_clone.tag, saddr, daddr);
-                        break;
-                    }
-
-                    // update timer
-                    exit_or_update_timer_tx.send(false).await.unwrap();
-                }
-
-                // exit
-                exit_or_update_timer_tx.send(true).await.unwrap();
-            }
-        });
-        // server
-        let task2 = tokio::spawn({
-            let self_clone = self.clone();
-            let saddr = saddr.clone();
-            async move {
-                loop {
+                    debug!("{} {} -> {} {}", self.tag, saddr, daddr, recv_data.len());
+                    server_tx
+                        .send((daddr.clone(), recv_data))
+                        .await
+                        .or(Err("close"))?;
+                },
+                {
                     // read server
-                    let (daddr, recv_data) = match server_rx.recv().await {
-                        Some(s) => s,
-                        None => {
-                            warn!("{} {} close", self_clone.tag, saddr);
-                            break;
-                        }
-                    };
+                    let (daddr, recv_data) = server_rx.recv().await.ok_or("close")?;
 
                     // write client
-                    debug!(
-                        "{} {} -> {} {}",
-                        self_clone.tag,
-                        daddr,
-                        saddr,
-                        recv_data.len()
-                    );
-                    if let Err(e) = self_clone.udp_sendto(daddr.clone(), saddr.clone(), recv_data) {
-                        warn!("{} {} -> {} {}", self_clone.tag, daddr, saddr, e);
-                        break;
+                    debug!("{} {} -> {} {}", self.tag, daddr, saddr, recv_data.len());
+                    self.udp_sendto(daddr.clone(), saddr.clone(), recv_data)?;
+                },
+                self.udp_timeout
+            ) {
+                (Err(e), _, _) | (_, _, Err(e)) | (_, Err(e), _) => {
+                    let e = e.to_string();
+                    if e.as_str() == "close" || e.as_str() == "timeout" {
+                        debug!("{} {} {}", self.tag, saddr, e)
+                    } else {
+                        warn!("{} {} {}", self.tag, saddr, e)
                     }
-
-                    // update timer
-                    exit_or_update_timer_tx.send(false).await.unwrap();
                 }
-
-                // exit
-                exit_or_update_timer_tx.send(true).await.unwrap();
-            }
-        });
-        // timeout and others
-        tokio::spawn({
-            async move {
-                loop {
-                    tokio::select! {
-                        _ = tokio::time::sleep(self.udp_timeout) => {
-                            debug!("{} {} timeout", self.tag, saddr);
-                            break;
-                        },
-                        exit = exit_or_update_timer_rx.recv() => {
-                            if exit.unwrap() {
-                                break;
-                            } else {
-                                continue;
-                            }
-                        },
-                    };
-                }
-
-                // delete from fullcone_map
-                self.fullcone_map.remove(&saddr);
-
-                task1.abort();
-                task2.abort();
-                let _ = task1.await;
-                let _ = task2.await;
+                _ => unreachable!(),
             }
         });
     }

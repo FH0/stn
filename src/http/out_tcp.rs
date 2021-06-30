@@ -43,101 +43,48 @@ impl crate::route::OutTcp for super::Out {
         let http_end_index = get_http_end_index(&buf)?;
         buf.drain(..http_end_index + 4);
 
-        let (exit_or_update_timer_tx, mut exit_or_update_timer_rx) = channel::<bool>(1);
-        // client
-        let task1 = tokio::spawn({
-            let exit_or_update_timer_tx = exit_or_update_timer_tx.clone();
-            let self_clone = self.clone();
-            let saddr = saddr.clone();
-            let daddr = daddr.clone();
-            async move {
-                loop {
+        tokio::spawn(async move {
+            let mut buf = vec![0; TCP_LEN];
+            match bidirectional_with_timeout!(
+                {
                     // write server, buf.len() may not 0, write server first
-                    debug!("{} {} -> {} {}", self_clone.tag, saddr, daddr, buf.len());
-                    if let Err(_) = server_tx.send(buf.clone()).await {
-                        debug!("{} {} -> {} close", self_clone.tag, saddr, daddr);
-                        break;
-                    }
-                    buf.truncate(0);
+                    debug!("{} {} -> {} {}", self.tag, saddr, daddr, buf.len());
+                    server_tx.send(buf.clone()).await.or(Err("close"))?;
+                    buf.resize(0, 0);
 
                     // read client
-                    let recv_data = match client_rx.recv().await {
-                        Some(s) => s,
-                        None => {
-                            debug!("{} {} -> {} close", self_clone.tag, saddr, daddr);
-                            break;
-                        }
-                    };
+                    let recv_data = client_rx.recv().await.ok_or("close")?;
                     buf.extend(recv_data);
-
-                    // update timer
-                    exit_or_update_timer_tx.send(false).await.unwrap();
-                }
-
-                // exit
-                exit_or_update_timer_tx.send(true).await.unwrap();
-            }
-        });
-        // server
-        let task2 = tokio::spawn({
-            let self_clone = self.clone();
-            let saddr = saddr.clone();
-            let daddr = daddr.clone();
-            async move {
-                loop {
+                },
+                {
                     // read server
-                    let recv_data = match server_rx.recv().await {
-                        Some(s) => s,
-                        None => {
-                            debug!("{} {} -> {} close", self_clone.tag, daddr, saddr);
-                            break;
-                        }
-                    };
+                    let recv_data = server_rx.recv().await.ok_or("close")?;
 
                     // write client
-                    debug!(
-                        "{} {} -> {} {}",
-                        self_clone.tag,
-                        daddr,
-                        saddr,
-                        recv_data.len()
-                    );
-                    if let Err(_) = client_tx.send(recv_data).await {
-                        debug!("{} {} -> {} close", self_clone.tag, daddr, saddr);
-                        break;
+                    debug!("{} {} -> {} {}", self.tag, daddr, saddr, recv_data.len());
+                    client_tx.send(recv_data).await.or(Err("close"))?;
+                },
+                self.tcp_timeout
+            ) {
+                // client or timeout error
+                (Err(e), _, _) | (_, _, Err(e)) => {
+                    let e = e.to_string();
+                    if e.as_str() == "close" {
+                        debug!("{} {} -> {} {}", self.tag, saddr, daddr, e)
+                    } else {
+                        warn!("{} {} -> {} {}", self.tag, saddr, daddr, e)
                     }
-
-                    // update timer
-                    exit_or_update_timer_tx.send(false).await.unwrap();
                 }
-
-                // exit
-                exit_or_update_timer_tx.send(true).await.unwrap();
-            }
-        });
-        // timeout and others
-        tokio::spawn({
-            async move {
-                loop {
-                    tokio::select! {
-                        _ = tokio::time::sleep(self.tcp_timeout) => {
-                            warn!("{} {} -> {} timeout", self.tag, saddr, daddr);
-                            break;
-                        },
-                        exit = exit_or_update_timer_rx.recv() => {
-                            if exit.unwrap() {
-                                break;
-                            } else {
-                                continue;
-                            }
-                        },
-                    };
+                // server error
+                (_, Err(e), _) => {
+                    let e = e.to_string();
+                    if e.as_str() == "close" {
+                        debug!("{} {} -> {} {}", self.tag, daddr, saddr, e)
+                    } else {
+                        warn!("{} {} -> {} {}", self.tag, daddr, saddr, e)
+                    }
                 }
-
-                task1.abort();
-                task2.abort();
-                let _ = task1.await;
-                let _ = task2.await;
+                _ => unreachable!(),
             }
         });
 

@@ -18,34 +18,15 @@ impl crate::route::OutUdp for super::Out {
         // send to multi daddr, only the first recv data send to client
         let multi_daddr_map = Arc::new(dashmap::DashMap::<Vec<Query>, String>::new());
 
-        let (exit_or_update_timer_tx, mut exit_or_update_timer_rx) = channel::<bool>(1);
-        // client
-        let task1 = tokio::spawn({
-            let exit_or_update_timer_tx = exit_or_update_timer_tx.clone();
-            let self_clone = self.clone();
-            let saddr = saddr.clone();
-            let client_tx = client_tx.clone();
-            let multi_daddr_map = multi_daddr_map.clone();
-            async move {
-                loop {
+        tokio::spawn(async move {
+            match bidirectional_with_timeout!(
+                {
                     // read client
-                    let (daddr, recv_data) = match client_rx.recv().await {
-                        Some(s) => s,
-                        None => {
-                            debug!("{} {} close", self_clone.tag, saddr);
-                            break;
-                        }
-                    };
+                    let (daddr, recv_data) = client_rx.recv().await.ok_or("close")?;
                     // if cached
-                    let dns_msg = match Message::from_vec(&recv_data) {
-                        Ok(o) => o,
-                        Err(e) => {
-                            warn!("{} {} -> {} {}", self_clone.tag, saddr, daddr, e);
-                            continue;
-                        }
-                    };
+                    let dns_msg = Message::from_vec(&recv_data)?;
                     let lru_cache_value_option =
-                        match self_clone.cache.lock().get(&dns_msg.queries().to_vec()) {
+                        match self.cache.lock().get(&dns_msg.queries().to_vec()) {
                             Some(s) => {
                                 // compare deadline
                                 if tokio::time::Instant::now() <= s.1 {
@@ -61,73 +42,35 @@ impl crate::route::OutUdp for super::Out {
                         message.set_id(dns_msg.id());
 
                         // write client
-                        let buf = match message.to_vec() {
-                            Ok(o) => o,
-                            Err(e) => {
-                                warn!("{} {} -> {} {}", self_clone.tag, saddr, daddr, e);
-                                continue;
-                            }
-                        };
-                        debug!("{} {} -> {} {}", self_clone.tag, daddr, saddr, buf.len());
-                        if let Err(_) = client_tx.send((daddr.clone(), buf)).await {
-                            debug!("{} {} -> {} close", self_clone.tag, daddr, saddr);
-                            break;
-                        }
+                        let buf = message.to_vec()?;
+                        debug!("{} {} -> {} {}", self.tag, daddr, saddr, buf.len());
+                        client_tx
+                            .send((daddr.clone(), buf))
+                            .await
+                            .or(Err("close"))?;
                     } else {
                         // record
                         multi_daddr_map.insert(dns_msg.queries().to_vec(), daddr.clone());
 
                         // write server
-                        let daddrs = self_clone.server.read().clone();
+                        let daddrs = self.server.read().clone();
                         for daddr in daddrs {
-                            debug!(
-                                "{} {} -> {} {}",
-                                self_clone.tag,
-                                saddr,
-                                daddr,
-                                recv_data.len()
-                            );
-                            if let Err(_) =
-                                server_tx.send((daddr.to_string(), recv_data.clone())).await
-                            {
-                                debug!("{} {} -> {} close", self_clone.tag, saddr, daddr);
-                                break;
-                            }
+                            debug!("{} {} -> {} {}", self.tag, saddr, daddr, recv_data.len());
+
+                            server_tx
+                                .send((daddr.to_string(), recv_data.clone()))
+                                .await
+                                .or(Err("close"))?;
                         }
                     }
-
-                    // update timer
-                    exit_or_update_timer_tx.send(false).await.unwrap();
-                }
-
-                // exit
-                exit_or_update_timer_tx.send(true).await.unwrap();
-            }
-        });
-        // server
-        let task2 = tokio::spawn({
-            let self_clone = self.clone();
-            let saddr = saddr.clone();
-            async move {
-                loop {
+                },
+                {
                     // read server
-                    let (daddr, recv_data) = match server_rx.recv().await {
-                        Some(s) => s,
-                        None => {
-                            debug!("{} {} close", self_clone.tag, saddr);
-                            break;
-                        }
-                    };
+                    let (_, recv_data) = server_rx.recv().await.ok_or("close")?;
 
                     // write client
                     // check cache
-                    let mut dns_msg = match Message::from_vec(&recv_data) {
-                        Ok(o) => o,
-                        Err(e) => {
-                            warn!("{} {} -> {} {}", self_clone.tag, daddr, saddr, e);
-                            continue;
-                        }
-                    };
+                    let mut dns_msg = Message::from_vec(&recv_data)?;
                     let daddr = if let Some(s) = multi_daddr_map.remove(&dns_msg.queries().to_vec())
                     {
                         s.1.clone()
@@ -137,24 +80,18 @@ impl crate::route::OutUdp for super::Out {
                     // set ttl
                     let mut last_ttl = 0u64;
                     for i in dns_msg.answers_mut() {
-                        if i.ttl() < self_clone.min_ttl {
-                            i.set_ttl(self_clone.min_ttl);
-                        } else if i.ttl() > self_clone.max_ttl {
-                            i.set_ttl(self_clone.max_ttl);
+                        if i.ttl() < self.min_ttl {
+                            i.set_ttl(self.min_ttl);
+                        } else if i.ttl() > self.max_ttl {
+                            i.set_ttl(self.max_ttl);
                         }
 
                         last_ttl = i.ttl() as _;
                     }
-                    let buf = match dns_msg.to_vec() {
-                        Ok(o) => o,
-                        Err(e) => {
-                            warn!("{} {} -> {} {}", self_clone.tag, daddr, saddr, e);
-                            continue;
-                        }
-                    };
+                    let buf = dns_msg.to_vec()?;
                     // cache
                     {
-                        let mut cache_lock = self_clone.cache.lock();
+                        let mut cache_lock = self.cache.lock();
                         cache_lock.put(
                             dns_msg.queries().to_vec(),
                             (
@@ -163,43 +100,23 @@ impl crate::route::OutUdp for super::Out {
                             ),
                         );
                     }
-                    debug!("{} {} -> {} {}", self_clone.tag, daddr, saddr, buf.len());
-                    if let Err(_) = client_tx.send((daddr.clone(), buf)).await {
-                        debug!("{} {} -> {} close", self_clone.tag, daddr, saddr);
-                        break;
+                    debug!("{} {} -> {} {}", self.tag, daddr, saddr, buf.len());
+                    client_tx
+                        .send((daddr.clone(), buf))
+                        .await
+                        .or(Err("close"))?;
+                },
+                self.udp_timeout
+            ) {
+                (Err(e), _, _) | (_, _, Err(e)) | (_, Err(e), _) => {
+                    let e = e.to_string();
+                    if e.as_str() == "close" || e.as_str() == "timeout" {
+                        debug!("{} {} {}", self.tag, saddr, e)
+                    } else {
+                        warn!("{} {} {}", self.tag, saddr, e)
                     }
-
-                    // update timer
-                    exit_or_update_timer_tx.send(false).await.unwrap();
                 }
-
-                // exit
-                exit_or_update_timer_tx.send(true).await.unwrap();
-            }
-        });
-        // timeout and others
-        tokio::spawn({
-            async move {
-                loop {
-                    tokio::select! {
-                        _ = tokio::time::sleep(self.udp_timeout) => {
-                            debug!("{} {} timeout", self.tag, saddr);
-                            break;
-                        },
-                        exit = exit_or_update_timer_rx.recv() => {
-                            if exit.unwrap() {
-                                break;
-                            } else {
-                                continue;
-                            }
-                        },
-                    };
-                }
-
-                task1.abort();
-                task2.abort();
-                let _ = task1.await;
-                let _ = task2.await;
+                _ => unreachable!(),
             }
         });
 

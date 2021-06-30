@@ -17,117 +17,42 @@ impl crate::route::OutUdp for super::Out {
         )?);
         let (own_tx, mut client_rx) = channel::<(String, Vec<u8>)>(100);
 
-        let (exit_or_update_timer_tx, mut exit_or_update_timer_rx) = channel::<bool>(1);
-        // client
-        let task1 = tokio::spawn({
-            let exit_or_update_timer_tx = exit_or_update_timer_tx.clone();
-            let server = server.clone();
-            let self_clone = self.clone();
-            let saddr = saddr.clone();
-            async move {
-                loop {
+        tokio::spawn(async move {
+            let mut buf = vec![0; UDP_LEN];
+            match bidirectional_with_timeout!(
+                {
                     // read client
-                    let (daddr, recv_data) = match client_rx.recv().await {
-                        Some(s) => s,
-                        None => {
-                            debug!("{} {} close", self_clone.tag, saddr);
-                            break;
-                        }
-                    };
+                    let (daddr, recv_data) = client_rx.recv().await.ok_or("close")?;
 
                     // write server
-                    debug!(
-                        "{} {} -> {} {}",
-                        self_clone.tag,
-                        saddr,
-                        daddr,
-                        recv_data.len()
-                    );
-                    let daddr_ip = match crate::resolve::resolve(&daddr).await {
-                        Ok(o) => o,
-                        Err(e) => {
-                            warn!("{} {} -> {} {}", self_clone.tag, saddr, daddr, e);
-                            continue;
-                        }
-                    };
-                    let daddr_ipv6 = match build_socketaddrv6(daddr_ip) {
-                        Ok(o) => o,
-                        Err(e) => {
-                            warn!("{} {} -> {} {}", self_clone.tag, saddr, daddr, e);
-                            continue;
-                        }
-                    };
-                    if let Err(e) = server.send_to(&recv_data, daddr_ipv6).await {
-                        warn!("{} {} -> {} {}", self_clone.tag, saddr, daddr, e);
-                        continue;
-                    }
-
-                    // update timer
-                    exit_or_update_timer_tx.send(false).await.unwrap();
-                }
-
-                // exit
-                exit_or_update_timer_tx.send(true).await.unwrap();
-            }
-        });
-        // server
-        let task2 = tokio::spawn({
-            let self_clone = self.clone();
-            let saddr = saddr.clone();
-            async move {
-                let mut buf = vec![0; UDP_LEN];
-                loop {
+                    debug!("{} {} -> {} {}", self.tag, saddr, daddr, recv_data.len());
+                    let daddr_ip = crate::resolve::resolve(&daddr).await?;
+                    let daddr_ipv6 = build_socketaddrv6(daddr_ip)?;
+                    server.send_to(&recv_data, daddr_ipv6).await?;
+                },
+                {
                     // read server
-                    let (nrecv, daddr) = match server.recv_from(&mut buf).await {
-                        Ok(o) => o,
-                        Err(e) => {
-                            warn!("{} {} {}", self_clone.tag, saddr, e);
-                            break;
-                        }
-                    };
+                    let (nrecv, daddr) = server.recv_from(&mut buf).await?;
                     let daddr = socketaddr_to_string(&daddr);
 
                     // write client
-                    debug!("{} {} -> {} {}", self_clone.tag, daddr, saddr, nrecv);
-                    if let Err(_) = client_tx
+                    debug!("{} {} -> {} {}", self.tag, daddr, saddr, nrecv);
+                    client_tx
                         .send((daddr.to_string(), buf[..nrecv].to_vec()))
                         .await
-                    {
-                        debug!("{} {} -> {} close", self_clone.tag, daddr, saddr);
-                        break;
+                        .or(Err("close"))?;
+                },
+                self.udp_timeout
+            ) {
+                (Err(e), _, _) | (_, _, Err(e)) | (_, Err(e), _) => {
+                    let e = e.to_string();
+                    if e.as_str() == "close" || e.as_str() == "timeout" {
+                        debug!("{} {} {}", self.tag, saddr, e)
+                    } else {
+                        warn!("{} {} {}", self.tag, saddr, e)
                     }
-
-                    // update timer
-                    exit_or_update_timer_tx.send(false).await.unwrap();
                 }
-
-                // exit
-                exit_or_update_timer_tx.send(true).await.unwrap();
-            }
-        });
-        // timeout and others
-        tokio::spawn({
-            async move {
-                loop {
-                    tokio::select! {
-                        _ = tokio::time::sleep(self.udp_timeout) => {
-                            debug!("{} {} timeout", self.tag, saddr);
-                            break;
-                        },
-                        exit = exit_or_update_timer_rx.recv() => {
-                            if exit.unwrap() {
-                                break;
-                            } else {
-                                continue;
-                            }
-                        },
-                    };
-                }
-
-                task1.abort();
-                task2.abort();
-                let _ = task1.await;
-                let _ = task2.await;
+                _ => unreachable!(),
             }
         });
 
