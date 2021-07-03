@@ -10,7 +10,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use tokio::{sync::mpsc::channel, task::JoinHandle, time::timeout};
+use tokio::{task::JoinHandle, time::timeout};
 use trust_dns_proto::{
     op::{Message, MessageType, Query, ResponseCode},
     rr::{DNSClass, Name, RData, RecordType},
@@ -91,15 +91,13 @@ pub(crate) async fn resolve(addr_str: &String) -> Result<String, Box<dyn std::er
     }
 
     // bind
-    let (own_tx, mut server_rx) = channel::<(String, Vec<u8>)>(100);
-    let server_tx = crate::route::udp_bind(
+    let (server_tx, mut server_rx) = crate::route::udp_bind(
         RESOLVE.read().tag.clone(),
         format!(
             "{}:{}",
             RESOLVE.read().tag,
             domain.as_ptr() as *const usize as usize
         ),
-        own_tx,
     )?;
 
     // send

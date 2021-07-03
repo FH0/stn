@@ -52,14 +52,14 @@ impl In {
 
     async fn handle_socks5_udp(self: Arc<Self>, saddr: String, mut client_rx: Receiver<Vec<u8>>) {
         // bind
-        let (own_tx, mut server_rx) = channel::<(String, Vec<u8>)>(100);
-        let server_tx = match crate::route::udp_bind(self.tag.clone(), saddr.clone(), own_tx) {
-            Ok(o) => o,
-            Err(e) => {
-                warn!("{} {} {}", self.tag, saddr, e);
-                return;
-            }
-        };
+        let (server_tx, mut server_rx) =
+            match crate::route::udp_bind(self.tag.clone(), saddr.clone()) {
+                Ok(o) => o,
+                Err(e) => {
+                    warn!("{} {} {}", self.tag, saddr, e);
+                    return;
+                }
+            };
 
         tokio::spawn(async move {
             match bidirectional_with_timeout!(

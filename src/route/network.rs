@@ -33,9 +33,9 @@ pub(crate) async fn tcp_connect(
 pub(crate) fn udp_bind(
     tag: String,
     saddr: String,
-    client_tx: Sender<(String, Vec<u8>)>,
-) -> Result<Sender<(String, Vec<u8>)>, Box<dyn std::error::Error>> {
-    let (own_tx, mut own_rx) = channel::<(String, Vec<u8>)>(100);
+) -> Result<(Sender<(String, Vec<u8>)>, Receiver<(String, Vec<u8>)>), Box<dyn std::error::Error>> {
+    let (client_tx, server_rx) = channel::<(String, Vec<u8>)>(100);
+    let (server_tx, mut client_rx) = channel::<(String, Vec<u8>)>(100);
 
     // dispatch, single src may have multi dst out
     tokio::spawn({
@@ -44,7 +44,7 @@ pub(crate) fn udp_bind(
             let unique_port = Box::new(0u8).as_ref() as *const _ as usize;
 
             // if None recv, return
-            while let Some((daddr, recv_data)) = own_rx.recv().await {
+            while let Some((daddr, recv_data)) = client_rx.recv().await {
                 // out_usize as map key
                 let out = find_out(
                     tag.clone(),
@@ -82,7 +82,7 @@ pub(crate) fn udp_bind(
         }
     });
 
-    Ok(own_tx)
+    Ok((server_tx, server_rx))
 }
 
 macro_rules! bidirectional_with_timeout {

@@ -11,8 +11,7 @@ impl crate::route::OutUdp for super::Out {
         client_tx: tokio::sync::mpsc::Sender<(String, Vec<u8>)>,
     ) -> Result<tokio::sync::mpsc::Sender<(String, Vec<u8>)>, Box<dyn std::error::Error>> {
         // bind
-        let (own_tx, mut server_rx) = channel::<(String, Vec<u8>)>(100);
-        let server_tx = crate::route::udp_bind(self.tag.clone(), saddr.clone(), own_tx)?;
+        let (server_tx, mut server_rx) = crate::route::udp_bind(self.tag.clone(), saddr.clone())?;
         let (own_tx, mut client_rx) = channel::<(String, Vec<u8>)>(100);
 
         tokio::spawn(async move {
