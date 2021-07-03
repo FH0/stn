@@ -17,7 +17,6 @@ impl crate::route::OutTcp for super::Out {
         client_tx: Sender<Vec<u8>>,
     ) -> Result<Sender<Vec<u8>>, Box<dyn std::error::Error>> {
         // connect
-        debug!("{} {} -> {} connect", self.tag, saddr, daddr);
         let daddr_ip = crate::resolve::resolve(&daddr).await?;
         let server = timeout(self.tcp_timeout, TcpStream::connect(daddr_ip)).await??;
         crate::misc::set_nodelay_keepalive_interval(

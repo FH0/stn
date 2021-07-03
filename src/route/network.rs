@@ -10,6 +10,8 @@ pub(crate) async fn tcp_connect(
     saddr: String,
     daddr: String,
 ) -> Result<(Sender<Vec<u8>>, Receiver<Vec<u8>>), Box<dyn std::error::Error>> {
+    debug!("{} {} -> {} connect", tag, saddr, daddr);
+
     let (client_tx, server_rx) = channel::<Vec<u8>>(1);
 
     // tcp needn't dispatch

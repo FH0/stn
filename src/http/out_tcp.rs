@@ -15,7 +15,6 @@ impl crate::route::OutTcp for super::Out {
         client_tx: Sender<Vec<u8>>,
     ) -> Result<Sender<Vec<u8>>, Box<dyn std::error::Error>> {
         // connect
-        debug!("{} {} -> {} connect", self.tag, saddr, daddr);
         let (server_tx, mut server_rx) = timeout(
             self.tcp_timeout,
             crate::route::tcp_connect(self.tag.clone(), saddr.clone(), self.addr.clone()),

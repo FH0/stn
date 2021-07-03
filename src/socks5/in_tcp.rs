@@ -47,7 +47,6 @@ impl super::In {
 
         // connect
         let (mut client_rx, mut client_tx) = client.into_split();
-        debug!("{} {} -> {} connect", self.tag, saddr, daddr);
         let (server_tx, mut server_rx) = match timeout(
             self.tcp_timeout,
             crate::route::tcp_connect(self.tag.clone(), saddr.clone(), daddr.clone()),
