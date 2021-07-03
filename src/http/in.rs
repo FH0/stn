@@ -60,74 +60,54 @@ impl In {
                 continue;
             }
 
-            tokio::spawn(
-                self.clone()
-                    .handle_handshake(client, socketaddr_to_string(&saddr)),
-            );
+            tokio::spawn({
+                let self_clone = self.clone();
+                async move {
+                    let saddr = socketaddr_to_string(&saddr);
+                    if let Err(e) = self_clone
+                        .clone()
+                        .handle_handshake(client, saddr.clone())
+                        .await
+                    {
+                        warn!("{} {} {}", self_clone.tag, saddr, e);
+                    }
+                }
+            });
         }
     }
 
-    async fn handle_handshake(self: Arc<Self>, mut client: TcpStream, saddr: String) {
+    async fn handle_handshake(
+        self: Arc<Self>,
+        mut client: TcpStream,
+        saddr: String,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut buf = vec![0u8; TCP_LEN];
 
         // get daddr
-        let mut buflen = match timeout(self.tcp_timeout, client.read(&mut buf)).await {
-            Ok(o) => match o {
-                Ok(0) => {
-                    warn!("{} {} close", self.tag, saddr);
-                    return;
-                }
-                Ok(o) => o,
-                Err(e) => {
-                    warn!("{} {} {}", self.tag, saddr, e);
-                    return;
-                }
-            },
-            Err(e) => {
-                warn!("{} {} {}", self.tag, saddr, e);
-                return;
-            }
-        };
-        let daddr = match get_http_addr(&buf[..buflen]) {
-            Ok(o) => o,
-            Err(e) => {
-                warn!("{} {} {}", self.tag, saddr, e);
-                return;
-            }
-        };
+        let mut buflen = timeout(self.tcp_timeout, client.read(&mut buf)).await??;
+        let daddr = get_http_addr(&buf[..buflen])?;
 
         // CONNECT
         if String::from_utf8_lossy(&buf[..buflen]).contains("CONNECT ") {
             // response
-            match timeout(
+            timeout(
                 self.tcp_timeout,
                 client.write_all("HTTP/1.1 200 Connection established\r\n\r\n".as_bytes()),
             )
-            .await
-            {
-                Ok(o) => match o {
-                    Ok(o) => o,
-                    Err(e) => {
-                        warn!("{} {} {}", self.tag, saddr, e);
-                        return;
-                    }
-                },
-                Err(e) => {
-                    warn!("{} {} {}", self.tag, saddr, e);
-                    return;
-                }
-            };
+            .await??;
 
-            let http_end_index = match get_http_end_index(&buf[..buflen]) {
-                Ok(o) => o,
-                Err(e) => {
-                    warn!("{} {} {}", self.tag, saddr, e);
-                    return;
-                }
-            };
+            let http_end_index = get_http_end_index(&buf[..buflen])?;
             memmove_buf(&mut buf, &mut buflen, http_end_index + 4);
         }
 
-        self.handle_tcp(client, saddr, daddr, buf, buflen).await;
+        if let Err(e) = self
+            .clone()
+            .handle_tcp(client, saddr.clone(), daddr.clone(), buf, buflen)
+            .await
+        {
+            warn!("{} {} -> {} {}", self.tag, saddr, daddr, e);
+        }
+
+        Ok(())
     }
 }

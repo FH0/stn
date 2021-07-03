@@ -15,7 +15,7 @@ impl super::In {
         saddr: String,
         mut buf: Vec<u8>,
         mut buflen: usize,
-    ) {
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // +----+-----+-------+------+----------+----------+
         // |VER | CMD |  RSV  | ATYP | DST.ADDR | DST.PORT |
         // +----+-----+-------+------+----------+----------+
@@ -36,35 +36,16 @@ impl super::In {
         //    order
 
         // get daddr
-        let (daddr, daddr_len) = match get_daddr(&buf[3..]) {
-            Ok(o) => o,
-            Err(e) => {
-                warn!("{} {} {}", self.tag, saddr, e);
-                return;
-            }
-        };
+        let (daddr, daddr_len) = get_daddr(&buf[3..])?;
         memmove_buf(&mut buf, &mut buflen, 4 + daddr_len + 2);
 
         // connect
         let (mut client_rx, mut client_tx) = client.into_split();
-        let (server_tx, mut server_rx) = match timeout(
+        let (server_tx, mut server_rx) = timeout(
             self.tcp_timeout,
             crate::route::tcp_connect(self.tag.clone(), saddr.clone(), daddr.clone()),
         )
-        .await
-        {
-            Ok(o) => match o {
-                Ok(o) => o,
-                Err(e) => {
-                    warn!("{} {} -> {} {}", self.tag, saddr, daddr, e);
-                    return;
-                }
-            },
-            Err(e) => {
-                warn!("{} {} -> {} {}", self.tag, saddr, daddr, e);
-                return;
-            }
-        };
+        .await??;
 
         tokio::spawn(async move {
             let mut buf = vec![0; TCP_LEN];
@@ -118,5 +99,7 @@ impl super::In {
                 _ => unreachable!(),
             }
         });
+
+        Ok(())
     }
 }

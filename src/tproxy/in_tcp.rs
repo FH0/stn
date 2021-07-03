@@ -28,36 +28,36 @@ impl In {
                 continue;
             }
 
-            tokio::spawn(
-                self.clone()
-                    .handle_handshake(client, socketaddr_to_string(&saddr)),
-            );
+            tokio::spawn({
+                let self_clone = self.clone();
+                async move {
+                    let saddr = socketaddr_to_string(&saddr);
+                    if let Err(e) = self_clone
+                        .clone()
+                        .handle_handshake(client, saddr.clone())
+                        .await
+                    {
+                        warn!("{} {} {}", self_clone.tag, saddr, e);
+                    }
+                }
+            });
         }
     }
 
-    async fn handle_handshake(self: Arc<Self>, client: TcpStream, saddr: String) {
+    async fn handle_handshake(
+        self: Arc<Self>,
+        client: TcpStream,
+        saddr: String,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let daddr = socketaddr_to_string(&client.local_addr().unwrap());
 
         // connect
         let (mut client_rx, mut client_tx) = client.into_split();
-        let (server_tx, mut server_rx) = match timeout(
+        let (server_tx, mut server_rx) = timeout(
             self.tcp_timeout,
             crate::route::tcp_connect(self.tag.clone(), saddr.clone(), daddr.clone()),
         )
-        .await
-        {
-            Ok(o) => match o {
-                Ok(o) => o,
-                Err(e) => {
-                    warn!("{} {} -> {} {}", self.tag, saddr, daddr, e);
-                    return;
-                }
-            },
-            Err(e) => {
-                warn!("{} {} -> {} {}", self.tag, saddr, daddr, e);
-                return;
-            }
-        };
+        .await??;
 
         tokio::spawn(async move {
             let mut buf = vec![0; TCP_LEN];
@@ -107,5 +107,7 @@ impl In {
                 _ => unreachable!(),
             }
         });
+
+        Ok(())
     }
 }

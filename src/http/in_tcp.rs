@@ -14,27 +14,14 @@ impl super::In {
         daddr: String,
         mut buf: Vec<u8>,
         mut buflen: usize,
-    ) {
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // connect
         let (mut client_rx, mut client_tx) = client.into_split();
-        let (server_tx, mut server_rx) = match timeout(
+        let (server_tx, mut server_rx) = timeout(
             self.tcp_timeout,
             crate::route::tcp_connect(self.tag.clone(), saddr.clone(), daddr.clone()),
         )
-        .await
-        {
-            Ok(o) => match o {
-                Ok(o) => o,
-                Err(e) => {
-                    warn!("{} {} -> {} {}", self.tag, saddr, daddr, e);
-                    return;
-                }
-            },
-            Err(e) => {
-                warn!("{} {} -> {} {}", self.tag, saddr, daddr, e);
-                return;
-            }
-        };
+        .await??;
 
         tokio::spawn(async move {
             match bidirectional_with_timeout!(
@@ -87,5 +74,7 @@ impl super::In {
                 _ => unreachable!(),
             }
         });
+
+        Ok(())
     }
 }

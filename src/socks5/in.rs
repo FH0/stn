@@ -73,14 +73,27 @@ impl In {
                 continue;
             }
 
-            tokio::spawn(
-                self.clone()
-                    .handle_handshake(client, socketaddr_to_string(&saddr)),
-            );
+            tokio::spawn({
+                let self_clone = self.clone();
+                async move {
+                    let saddr = socketaddr_to_string(&saddr);
+                    if let Err(e) = self_clone
+                        .clone()
+                        .handle_handshake(client, saddr.clone())
+                        .await
+                    {
+                        warn!("{} {} {}", self_clone.tag, saddr, e);
+                    }
+                }
+            });
         }
     }
 
-    async fn handle_handshake(self: Arc<Self>, mut client: TcpStream, saddr: String) {
+    async fn handle_handshake(
+        self: Arc<Self>,
+        mut client: TcpStream,
+        saddr: String,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut buf = vec![0u8; TCP_LEN];
         let mut buflen = 0usize;
 
@@ -97,46 +110,30 @@ impl In {
         // o  X'FF' NO ACCEPTABLE METHODS
 
         // recv
-        let nread = match timeout(self.tcp_timeout, client.read(&mut buf)).await {
-            Ok(o) => match o {
-                Ok(0) => {
-                    warn!("{} {} close", self.tag, saddr);
-                    return;
-                }
-                Ok(o) => o,
-                Err(e) => {
-                    warn!("{} {} {}", self.tag, saddr, e);
-                    return;
-                }
-            },
-            Err(e) => {
-                warn!("{} {} {}", self.tag, saddr, e);
-                return;
-            }
-        };
+        let nread = timeout(self.tcp_timeout, client.read(&mut buf)).await??;
         buflen += nread;
         // check length
         if buflen < 2 || buflen < 2 + buf[1] as usize {
-            warn!(
+            Err(format!(
                 "{} {} buflen < 2 || buflen < 2 + buf[1] as usize",
                 self.tag, saddr
-            );
-            return;
+            ))?
         }
         // check version
         if buf[0] != 5 {
-            warn!("{} {} unsupport socks version:{}", self.tag, saddr, buf[0]);
-            return;
+            Err(format!(
+                "{} {} unsupport socks version:{}",
+                self.tag, saddr, buf[0]
+            ))?
         }
         // check methods
         if !&buf[2..2 + buf[1] as usize].contains(&0) {
-            warn!(
+            Err(format!(
                 "{} {} unsupport methods:{:?}",
                 self.tag,
                 saddr,
                 &buf[2..2 + buf[1] as usize]
-            );
-            return;
+            ))?
         }
         let header_len = 2 + buf[1] as usize;
         memmove_buf(&mut buf, &mut buflen, header_len);
@@ -154,18 +151,7 @@ impl In {
         // o  X'FF' NO ACCEPTABLE METHODS
 
         // send
-        match timeout(self.tcp_timeout, client.write_all(&[5, 0])).await {
-            Ok(o) => {
-                if let Err(e) = o {
-                    warn!("{} {} {}", self.tag, saddr, e);
-                    return;
-                }
-            }
-            Err(e) => {
-                warn!("{} {} {}", self.tag, saddr, e);
-                return;
-            }
-        }
+        timeout(self.tcp_timeout, client.write_all(&[5, 0])).await??;
 
         // +----+-----+-------+------+----------+----------+
         // |VER | CMD |  RSV  | ATYP | DST.ADDR | DST.PORT |
@@ -199,35 +185,18 @@ impl In {
                         }
                     }
                     ATYP_IPV6 => 16,
-                    _ => {
-                        warn!("{} {} unsupport ATYP:{}", self.tag, saddr, buf[3]);
-                        return;
-                    }
+                    _ => Err(format!("{} {} unsupport ATYP:{}", self.tag, saddr, buf[3]))?,
                 } + 2
         {
-            let nread = match timeout(self.tcp_timeout, client.read(&mut buf[buflen..])).await {
-                Ok(o) => match o {
-                    Ok(0) => {
-                        warn!("{} {} close", self.tag, saddr);
-                        return;
-                    }
-                    Ok(o) => o,
-                    Err(e) => {
-                        warn!("{} {} {}", self.tag, saddr, e);
-                        return;
-                    }
-                },
-                Err(e) => {
-                    warn!("{} {} {}", self.tag, saddr, e);
-                    return;
-                }
-            };
+            let nread = timeout(self.tcp_timeout, client.read(&mut buf[buflen..])).await??;
             buflen += nread;
         }
         // check version
         if buf[0] != 5 {
-            warn!("{} {} unsupport socks version:{}", self.tag, saddr, buf[0]);
-            return;
+            Err(format!(
+                "{} {} unsupport socks version:{}",
+                self.tag, saddr, buf[0]
+            ))?
         }
 
         // +----+-----+-------+------+----------+----------+
@@ -256,32 +225,27 @@ impl In {
         //  o  BND.PORT       server bound port in network octet order
 
         // send
-        match timeout(
+        timeout(
             self.tcp_timeout,
             client.write_all(&[5, 0, 0, 1, 0, 0, 0, 0, 0, 0]),
         )
-        .await
-        {
-            Ok(o) => {
-                if let Err(e) = o {
-                    warn!("{} {} {}", self.tag, saddr, e);
-                    return;
-                }
-            }
-            Err(e) => {
-                warn!("{} {} {}", self.tag, saddr, e);
-                return;
-            }
-        }
+        .await??;
 
         // read CMD
         match buf[1] {
-            CMD_CONNECT => self.handle_tcp(client, saddr, buf, buflen).await,
-            CMD_UDP_ASSOCIATE => self.handle_udp(client).await,
-            _ => {
-                warn!("{} {} unsupport CMD:{}", self.tag, saddr, buf[1]);
-                return;
+            CMD_CONNECT => {
+                if let Err(e) = self
+                    .clone()
+                    .handle_tcp(client, saddr.clone(), buf, buflen)
+                    .await
+                {
+                    warn!("{} {} {}", self.tag, saddr, e);
+                }
             }
+            CMD_UDP_ASSOCIATE => self.handle_udp(client).await,
+            _ => Err(format!("{} {} unsupport CMD:{}", self.tag, saddr, buf[1]))?,
         }
+
+        Ok(())
     }
 }
