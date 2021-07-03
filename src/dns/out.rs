@@ -49,12 +49,6 @@ impl Out {
 
         let mut tasks: Vec<JoinHandle<()>> = Vec::new();
 
-        let saddr = format!(
-            "{}_refresh_cache:{}",
-            self.tag,
-            self.as_ref() as *const _ as *const usize as usize
-        );
-
         loop {
             tokio::time::sleep(interval).await;
 
@@ -71,23 +65,6 @@ impl Out {
                     queries.push(k.clone());
                 }
             }
-            if queries.len() == 0 {
-                continue;
-            }
-
-            // new a udp
-            let (own_tx, mut server_rx) = channel(100);
-            let server_tx = self.clone().udp_bind(saddr.clone(), own_tx).await.unwrap();
-
-            // ignore server
-            tasks.push(tokio::spawn({
-                let server_tx = server_tx.clone(); // keep connection
-                async move {
-                    while let Some(_) = server_rx.recv().await {}
-                    debug!("close");
-                    let _ = server_tx;
-                }
-            }));
 
             // delete cache
             {
@@ -107,6 +84,27 @@ impl Out {
                         i.query_class()
                     );
                 }
+
+                // generate saddr
+                let saddr = format!(
+                    "{}_refresh_cache:{}",
+                    self.tag,
+                    query.as_ptr() as *const usize as usize,
+                );
+
+                // new a udp
+                let (own_tx, mut server_rx) = channel(100);
+                let server_tx = self.clone().udp_bind(saddr.clone(), own_tx).await.unwrap();
+
+                // ignore server
+                tasks.push(tokio::spawn({
+                    let server_tx = server_tx.clone(); // keep connection
+                    async move {
+                        while let Some(_) = server_rx.recv().await {}
+                        debug!("close");
+                        let _ = server_tx;
+                    }
+                }));
 
                 // send
                 let mut dns_msg = Message::new();
