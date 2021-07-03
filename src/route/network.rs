@@ -1,7 +1,7 @@
 use crate::route::find_out;
 use log::*;
 use std::collections::HashMap;
-use tokio::sync::mpsc::{channel, Sender};
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 // route global entry
 #[inline]
@@ -9,10 +9,11 @@ pub(crate) async fn tcp_connect(
     tag: String,
     saddr: String,
     daddr: String,
-    client_tx: Sender<Vec<u8>>,
-) -> Result<Sender<Vec<u8>>, Box<dyn std::error::Error>> {
+) -> Result<(Sender<Vec<u8>>, Receiver<Vec<u8>>), Box<dyn std::error::Error>> {
+    let (client_tx, server_rx) = channel::<Vec<u8>>(1);
+
     // tcp needn't dispatch
-    find_out(tag.clone(), "tcp".to_string(), saddr, daddr.clone(), &[])
+    let server_tx = find_out(tag.clone(), "tcp".to_string(), saddr, daddr.clone(), &[])
         .tcp_connect(
             format!(
                 "{}:{}",
@@ -22,7 +23,9 @@ pub(crate) async fn tcp_connect(
             daddr,
             client_tx,
         )
-        .await
+        .await?;
+
+    Ok((server_tx, server_rx))
 }
 
 // route global entry

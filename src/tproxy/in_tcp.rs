@@ -5,7 +5,6 @@ use std::sync::Arc;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
-    sync::mpsc::channel,
     time::timeout,
 };
 
@@ -41,11 +40,10 @@ impl In {
 
         // connect
         let (mut client_rx, mut client_tx) = client.into_split();
-        let (own_tx, mut server_rx) = channel::<Vec<u8>>(1);
         debug!("{} {} -> {} connect", self.tag, saddr, daddr);
-        let server_tx = match timeout(
+        let (server_tx, mut server_rx) = match timeout(
             self.tcp_timeout,
-            crate::route::tcp_connect(self.tag.clone(), saddr.clone(), daddr.clone(), own_tx),
+            crate::route::tcp_connect(self.tag.clone(), saddr.clone(), daddr.clone()),
         )
         .await
         {
