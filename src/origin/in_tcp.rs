@@ -20,17 +20,14 @@ impl super::In {
                 }
             };
 
-            let client = match crate::misc::set_nodelay_keepalive_interval(
-                client,
+            if let Err(e) = crate::misc::set_nodelay_keepalive_interval(
+                &client,
                 self.tcp_nodelay,
                 self.tcp_keepalive_inverval,
             ) {
-                Ok(o) => o,
-                Err(e) => {
-                    warn!("{} {} {}", self.tag, saddr, e);
-                    continue;
-                }
-            };
+                warn!("{} {} {}", self.tag, saddr, e);
+                continue;
+            }
 
             tokio::spawn(
                 self.clone()

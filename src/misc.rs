@@ -128,15 +128,14 @@ pub(crate) fn build_socketaddrv6(
 
 #[inline]
 pub(crate) fn set_nodelay_keepalive_interval(
-    tokio_socket: tokio::net::TcpStream,
+    socket: &tokio::net::TcpStream,
     nodelay: bool,
     keepalive_interval: Duration,
-) -> Result<tokio::net::TcpStream, Box<dyn std::error::Error>> {
-    let std_socket = tokio_socket.into_std()?;
-    let socket2_socket = socket2::Socket::from(std_socket);
+) -> Result<(), Box<dyn std::error::Error>> {
+    let socket = socket2::SockRef::from(socket);
 
     // nodelay
-    let result1 = socket2_socket.set_nodelay(nodelay);
+    let result1 = socket.set_nodelay(nodelay);
 
     // keepalive interval
     let result2 = match keepalive_interval == Duration::from_secs(0) {
@@ -152,14 +151,14 @@ pub(crate) fn set_nodelay_keepalive_interval(
                 windows,
             ))]
             let tcp_keepalive = tcp_keepalive.with_interval(keepalive_interval);
-            socket2_socket.set_tcp_keepalive(&tcp_keepalive)
+            socket.set_tcp_keepalive(&tcp_keepalive)
         }
     };
 
     result1?;
     result2?;
 
-    Ok(tokio::net::TcpStream::from_std(socket2_socket.into())?)
+    Ok(())
 }
 
 #[inline]

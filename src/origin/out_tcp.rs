@@ -19,9 +19,9 @@ impl crate::route::OutTcp for super::Out {
         // connect
         debug!("{} {} -> {} connect", self.tag, saddr, daddr);
         let daddr_ip = crate::resolve::resolve(&daddr).await?;
-        let mut server = timeout(self.tcp_timeout, TcpStream::connect(daddr_ip)).await??;
-        server = crate::misc::set_nodelay_keepalive_interval(
-            server,
+        let server = timeout(self.tcp_timeout, TcpStream::connect(daddr_ip)).await??;
+        crate::misc::set_nodelay_keepalive_interval(
+            &server,
             self.tcp_nodelay,
             self.tcp_keepalive_inverval,
         )?;
