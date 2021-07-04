@@ -1,47 +1,43 @@
+use super::*;
+use hyper::upgrade::Upgraded;
 use log::*;
 use std::sync::Arc;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpStream,
     time::timeout,
 };
 
 impl super::In {
-    pub(crate) async fn handle_tcp(
+    pub(crate) async fn handle_connect(
         self: Arc<Self>,
-        client: TcpStream,
+        client: Upgraded,
         saddr: String,
         daddr: String,
-        mut buf: Vec<u8>,
-        mut buflen: usize,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // connect
-        let (mut client_rx, mut client_tx) = client.into_split();
+        let (mut client_rx, mut client_tx) = tokio::io::split(client);
         let (server_tx, mut server_rx) = timeout(
             self.tcp_timeout,
             crate::route::tcp_connect(self.tag.clone(), saddr.clone(), daddr.clone()),
         )
         .await??;
 
+        let mut buf = vec![0; TCP_LEN];
         tokio::spawn(async move {
             match bidirectional_with_timeout!(
                 {
-                    // write server, buflen may not 0, so write first
-                    if buflen != 0 {
-                        debug!("{} {} -> {} {}", self.tag, saddr, daddr, buflen);
-                        server_tx
-                            .send(buf[..buflen].to_vec())
-                            .await
-                            .or(Err("close"))?;
-                        buflen = 0;
-                    }
-
                     // read client
-                    let nread = client_rx.read(&mut buf[buflen..]).await?;
+                    let nread = client_rx.read(&mut buf).await?;
                     if nread == 0 {
                         Err("close")?
                     }
-                    buflen += nread;
+
+                    // write server
+                    debug!("{} {} -> {} {}", self.tag, saddr, daddr, nread);
+                    server_tx
+                        .send(buf[..nread].to_vec())
+                        .await
+                        .or(Err("close"))?;
                 },
                 {
                     // read server

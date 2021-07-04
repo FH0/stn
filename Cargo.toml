@@ -45,6 +45,12 @@ log = "0.4"
 # big/little endian
 bytes = "1"
 
+# http
+hyper = { version = "0.14", features=["full"] }
+
+# used in Future
+pin-project = "1.0"
+
 # dns
 trust-dns-proto = { version = "0.20", default-features = false }
 lru = "0.6"

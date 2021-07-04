@@ -1,4 +1,4 @@
-use crate::misc::is_valid_domain;
+use hyper::{header::HeaderValue, http, HeaderMap};
 
 pub(crate) const TCP_LEN: usize = 8192;
 
@@ -22,52 +22,70 @@ pub(crate) fn get_http_end_index(buf: &[u8]) -> Result<usize, Box<dyn std::error
 }
 
 #[inline]
-pub(crate) fn get_http_addr(buf: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
-    // get addr
-    let buf_string = String::from_utf8_lossy(buf);
-    let raw_addr = buf_string.split(" ").nth(1).ok_or("invalid http header")?;
-    let result = if raw_addr.contains("http://") {
-        raw_addr.split("/").nth(2).ok_or("invalid http header")?
-    } else {
-        raw_addr
-    };
-
-    // add port
-    let result = if result.contains(":") {
-        result.to_string()
-    } else {
-        format!("{}:80", result)
-    };
-
-    // check validity
-    if !is_valid_domain(result.split(":").nth(0).unwrap()) {
-        Err(format!(
-            "invalid domain: {}",
-            result.split(":").nth(0).unwrap()
-        ))?
-    }
-
-    Ok(result)
+pub(super) fn host_addr(uri: &http::Uri) -> Option<String> {
+    uri.authority().and_then(|auth| {
+        Some({
+            let result = auth.to_string();
+            if result.contains(":") {
+                result
+            } else {
+                format!("{}:80", result)
+            }
+        })
+    })
 }
 
-#[test]
-fn test() {
-    assert_eq!(
-        get_http_addr("CONNECT a.com:443 HTTP/1.1\r\n\r\n".as_bytes())
-            .unwrap()
-            .as_str(),
-        "a.com:443"
-    );
-    assert_eq!(
-        get_http_addr("GET http://a.com/a.txt HTTP/1.1\r\n\r\n".as_bytes())
-            .unwrap()
-            .as_str(),
-        "a.com:80"
-    );
-    assert_eq!(
-        get_http_addr("GET http://a.com:232/a.txt HTTP/1.1\r\n\r\n".as_bytes())
-            .unwrap()
-            .as_str(),
-        "a.com:232"
-    );
+// from shadowsocks-rust
+pub(super) fn clear_hop_headers(headers: &mut HeaderMap<HeaderValue>) {
+    // Clear headers indicated by Connection and Proxy-Connection
+    let mut extra_headers = Vec::new();
+
+    for connection in headers.get_all("Connection") {
+        if let Ok(conn) = connection.to_str() {
+            // close is a command instead of a header
+            if conn.eq_ignore_ascii_case("close") {
+                continue;
+            }
+
+            for header in conn.split(',') {
+                let header = header.trim();
+                extra_headers.push(header.to_owned());
+            }
+        }
+    }
+
+    for connection in headers.get_all("Proxy-Connection") {
+        if let Ok(conn) = connection.to_str() {
+            // close is a command instead of a header
+            if conn.eq_ignore_ascii_case("close") {
+                continue;
+            }
+
+            for header in conn.split(',') {
+                let header = header.trim();
+                extra_headers.push(header.to_owned());
+            }
+        }
+    }
+
+    for header in extra_headers {
+        while let Some(..) = headers.remove(&header) {}
+    }
+
+    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Connection
+    const HOP_BY_HOP_HEADERS: [&str; 9] = [
+        "Keep-Alive",
+        "Transfer-Encoding",
+        "TE",
+        "Connection",
+        "Trailer",
+        "Upgrade",
+        "Proxy-Authorization",
+        "Proxy-Authenticate",
+        "Proxy-Connection", // Not standard, but many implementations do send this header
+    ];
+
+    for header in &HOP_BY_HOP_HEADERS {
+        while let Some(..) = headers.remove(*header) {}
+    }
 }

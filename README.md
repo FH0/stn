@@ -28,7 +28,3 @@ The compiled file is `target/release/stn`.
 ## Script
 
 - [bat script to set http proxy](doc/http_bat.md)
-
-## Known Issue
-
-- `http` `in` unsupport aria2 jsonrpc
