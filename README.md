@@ -20,7 +20,6 @@ The compiled file is `target/release/stn`.
 
 ## Todo
 
-- Github Actions
 - `sniff` out, get http and https domain from tcp stream
 - `redirect` out, like iptables DNAT
 - `tun` in
