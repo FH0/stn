@@ -121,7 +121,8 @@ impl AsyncRead for ProxyHttpResponse {
                     );
                     self.server_buf.extend(recv_data);
                 } else {
-                    Err(std::io::Error::new(std::io::ErrorKind::BrokenPipe, "close"))?
+                    // channel closed
+                    return Ok(());
                 }
             }
 

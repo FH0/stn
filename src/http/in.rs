@@ -69,7 +69,12 @@ impl In {
                         .handle_handshake(client, saddr.clone())
                         .await
                     {
-                        warn!("{} {} {}", self_clone.tag, saddr, e);
+                        let e = e.to_string();
+                        if e.contains("close") {
+                            debug!("{} {} {}", self_clone.tag, saddr, e);
+                        } else {
+                            warn!("{} {} {}", self_clone.tag, saddr, e);
+                        }
                     }
                 }
             });
