@@ -4,7 +4,6 @@ use std::sync::Arc;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
-    sync::mpsc::{channel, Sender},
     time::timeout,
 };
 
@@ -14,8 +13,9 @@ impl crate::route::OutTcp for super::Out {
         self: Arc<Self>,
         saddr: String,
         daddr: String,
-        client_tx: Sender<Vec<u8>>,
-    ) -> Result<Sender<Vec<u8>>, Box<dyn std::error::Error>> {
+        client_tx: tokio::sync::mpsc::Sender<Vec<u8>>,
+        mut client_rx: tokio::sync::mpsc::Receiver<Vec<u8>>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // connect
         let daddr_ip = crate::resolve::resolve(&daddr).await?;
         let server = timeout(self.tcp_timeout, TcpStream::connect(daddr_ip)).await??;
@@ -25,7 +25,6 @@ impl crate::route::OutTcp for super::Out {
             self.tcp_keepalive_inverval,
         )?;
         let (mut server_rx, mut server_tx) = server.into_split();
-        let (own_tx, mut client_rx) = channel::<Vec<u8>>(1);
 
         tokio::spawn(async move {
             let mut buf = vec![0; TCP_LEN];
@@ -76,6 +75,6 @@ impl crate::route::OutTcp for super::Out {
             }
         });
 
-        Ok(own_tx)
+        Ok(())
     }
 }

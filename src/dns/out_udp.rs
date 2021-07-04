@@ -1,6 +1,5 @@
 use log::*;
 use std::{sync::Arc, time::Duration};
-use tokio::sync::mpsc::{channel, Sender};
 use trust_dns_proto::op::{Message, Query};
 
 #[async_trait::async_trait]
@@ -8,11 +7,11 @@ impl crate::route::OutUdp for super::Out {
     async fn udp_bind(
         self: Arc<Self>,
         saddr: String,
-        client_tx: Sender<(String, Vec<u8>)>,
-    ) -> Result<Sender<(String, Vec<u8>)>, Box<dyn std::error::Error>> {
+        client_tx: tokio::sync::mpsc::Sender<(String, Vec<u8>)>,
+        mut client_rx: tokio::sync::mpsc::Receiver<(String, Vec<u8>)>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // bind
         let (server_tx, mut server_rx) = crate::route::udp_bind(self.tag.clone(), saddr.clone())?;
-        let (own_tx, mut client_rx) = channel::<(String, Vec<u8>)>(100);
 
         // send to multi daddr, only the first recv data send to client
         let multi_daddr_map = Arc::new(dashmap::DashMap::<Vec<Query>, String>::new());
@@ -119,6 +118,6 @@ impl crate::route::OutUdp for super::Out {
             }
         });
 
-        Ok(own_tx)
+        Ok(())
     }
 }

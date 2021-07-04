@@ -1,10 +1,7 @@
 use super::*;
 use log::*;
 use std::sync::Arc;
-use tokio::{
-    sync::mpsc::{channel, Sender},
-    time::timeout,
-};
+use tokio::time::timeout;
 
 #[async_trait::async_trait]
 impl crate::route::OutTcp for super::Out {
@@ -12,15 +9,15 @@ impl crate::route::OutTcp for super::Out {
         self: Arc<Self>,
         saddr: String,
         daddr: String,
-        client_tx: Sender<Vec<u8>>,
-    ) -> Result<Sender<Vec<u8>>, Box<dyn std::error::Error>> {
+        client_tx: tokio::sync::mpsc::Sender<Vec<u8>>,
+        mut client_rx: tokio::sync::mpsc::Receiver<Vec<u8>>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // connect
         let (server_tx, mut server_rx) = timeout(
             self.tcp_timeout,
             crate::route::tcp_connect(self.tag.clone(), saddr.clone(), self.addr.clone()),
         )
         .await??;
-        let (own_tx, mut client_rx) = channel::<Vec<u8>>(1);
 
         // +----+----------+----------+
         // |VER | NMETHODS | METHODS  |
@@ -194,6 +191,6 @@ impl crate::route::OutTcp for super::Out {
             }
         });
 
-        Ok(own_tx)
+        Ok(())
     }
 }

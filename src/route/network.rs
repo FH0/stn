@@ -12,10 +12,11 @@ pub(crate) async fn tcp_connect(
 ) -> Result<(Sender<Vec<u8>>, Receiver<Vec<u8>>), Box<dyn std::error::Error>> {
     debug!("{} {} -> {} connect", tag, saddr, daddr);
 
-    let (client_tx, server_rx) = channel::<Vec<u8>>(1);
+    let (client_tx, server_rx) = channel(1);
+    let (server_tx, client_rx) = channel(1);
 
     // tcp needn't dispatch
-    let server_tx = find_out(tag.clone(), "tcp".to_string(), saddr, daddr.clone(), &[])
+    find_out(tag.clone(), "tcp".to_string(), saddr, daddr.clone(), &[])
         .tcp_connect(
             format!(
                 "{}:{}",
@@ -24,6 +25,7 @@ pub(crate) async fn tcp_connect(
             ),
             daddr,
             client_tx,
+            client_rx,
         )
         .await?;
 
@@ -61,8 +63,13 @@ pub(crate) fn udp_bind(
                 let server_tx = if let Some(s) = fullcone_map.get(&out_usize) {
                     s.clone()
                 } else {
-                    let server_tx = match out
-                        .udp_bind(format!("{}:{}", tag, unique_port), client_tx.clone())
+                    let (server_tx, server_rx) = channel(100);
+                    match out
+                        .udp_bind(
+                            format!("{}:{}", tag, unique_port),
+                            client_tx.clone(),
+                            server_rx,
+                        )
                         .await
                     {
                         Ok(o) => o,

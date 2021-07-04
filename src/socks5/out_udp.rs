@@ -1,7 +1,6 @@
 use super::*;
 use log::*;
 use std::sync::Arc;
-use tokio::sync::mpsc::channel;
 
 #[async_trait::async_trait]
 impl crate::route::OutUdp for super::Out {
@@ -9,10 +8,10 @@ impl crate::route::OutUdp for super::Out {
         self: Arc<Self>,
         saddr: String,
         client_tx: tokio::sync::mpsc::Sender<(String, Vec<u8>)>,
-    ) -> Result<tokio::sync::mpsc::Sender<(String, Vec<u8>)>, Box<dyn std::error::Error>> {
+        mut client_rx: tokio::sync::mpsc::Receiver<(String, Vec<u8>)>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // bind
         let (server_tx, mut server_rx) = crate::route::udp_bind(self.tag.clone(), saddr.clone())?;
-        let (own_tx, mut client_rx) = channel::<(String, Vec<u8>)>(100);
 
         tokio::spawn(async move {
             match bidirectional_with_timeout!(
@@ -120,6 +119,6 @@ impl crate::route::OutUdp for super::Out {
             }
         });
 
-        Ok(own_tx)
+        Ok(())
     }
 }

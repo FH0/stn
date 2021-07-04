@@ -93,8 +93,12 @@ impl Out {
                 );
 
                 // new a udp
-                let (own_tx, mut server_rx) = channel(100);
-                let server_tx = self.clone().udp_bind(saddr.clone(), own_tx).await.unwrap();
+                let (client_tx, mut server_rx) = channel(100);
+                let (server_tx, client_rx) = channel(100);
+                self.clone()
+                    .udp_bind(saddr.clone(), client_tx, client_rx)
+                    .await
+                    .unwrap();
 
                 // ignore server
                 tasks.push(tokio::spawn({
@@ -145,7 +149,8 @@ impl crate::route::OutTcp for Out {
         _saddr: String,
         _daddr: String,
         _client_tx: tokio::sync::mpsc::Sender<Vec<u8>>,
-    ) -> Result<tokio::sync::mpsc::Sender<Vec<u8>>, Box<dyn std::error::Error>> {
+        _client_rx: tokio::sync::mpsc::Receiver<Vec<u8>>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         Err("dns out unsupport tcp".into())
     }
 }

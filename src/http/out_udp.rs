@@ -6,7 +6,8 @@ impl crate::route::OutUdp for super::Out {
         self: Arc<Self>,
         _saddr: String,
         _client_tx: tokio::sync::mpsc::Sender<(String, Vec<u8>)>,
-    ) -> Result<tokio::sync::mpsc::Sender<(String, Vec<u8>)>, Box<dyn std::error::Error>> {
+        _client_rx: tokio::sync::mpsc::Receiver<(String, Vec<u8>)>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         Err("http unsupport udp")?
     }
 }

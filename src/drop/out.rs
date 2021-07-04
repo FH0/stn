@@ -1,6 +1,5 @@
 use log::*;
 use std::sync::Arc;
-use tokio::sync::mpsc::Sender;
 
 pub(crate) struct Out {
     pub(crate) tag: String,
@@ -20,8 +19,9 @@ impl crate::route::OutTcp for Out {
         self: Arc<Self>,
         saddr: String,
         daddr: String,
-        _client_tx: Sender<Vec<u8>>,
-    ) -> Result<Sender<Vec<u8>>, Box<dyn std::error::Error>> {
+        _client_tx: tokio::sync::mpsc::Sender<Vec<u8>>,
+        _client_rx: tokio::sync::mpsc::Receiver<Vec<u8>>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         debug!("{} {} -> {} drop", self.tag, saddr, daddr);
         Err("drop".into())
     }
@@ -32,8 +32,9 @@ impl crate::route::OutUdp for Out {
     async fn udp_bind(
         self: Arc<Self>,
         saddr: String,
-        _client_tx: Sender<(String, Vec<u8>)>,
-    ) -> Result<Sender<(String, Vec<u8>)>, Box<dyn std::error::Error>> {
+        _client_tx: tokio::sync::mpsc::Sender<(String, Vec<u8>)>,
+        _client_rx: tokio::sync::mpsc::Receiver<(String, Vec<u8>)>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         debug!("{} {} drop", self.tag, saddr);
         Err("drop".into())
     }
