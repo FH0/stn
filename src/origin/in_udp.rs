@@ -23,16 +23,9 @@ impl In {
             let server_tx = if let Some(s) = self.fullcone_map.get(&saddr) {
                 s.value().clone()
             } else {
-                let (own_tx, own_rx) = channel::<Vec<u8>>(100);
+                let (own_tx, own_rx) = channel(100);
                 self.fullcone_map.insert(saddr.clone(), own_tx.clone());
-                tokio::spawn({
-                    let self_clone = self.clone();
-                    let saddr = saddr.clone();
-                    async move {
-                        self_clone.clone().handle_udp(saddr.clone(), own_rx).await;
-                        self_clone.fullcone_map.remove(&saddr);
-                    }
-                });
+                tokio::spawn(self.clone().handle_udp(saddr.clone(), own_rx));
                 own_tx
             };
 
@@ -91,6 +84,9 @@ impl In {
                 }
                 _ => unreachable!(),
             }
+
+            // delete from fullcone_map
+            self.fullcone_map.remove(&saddr);
         });
     }
 }
