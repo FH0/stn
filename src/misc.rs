@@ -28,36 +28,6 @@ pub(crate) fn split_addr_str(
     Err(format!("invalid addr_str {}", addr_str).into())
 }
 
-#[cfg(not(target_os = "windows"))]
-pub(crate) fn sockaddr_to_std(saddr: &libc::sockaddr_storage) -> std::io::Result<SocketAddr> {
-    match saddr.ss_family as libc::c_int {
-        libc::AF_INET => {
-            let addr: SocketAddrV4 = unsafe { std::mem::transmute_copy(saddr) };
-            Ok(SocketAddr::V4(addr))
-        }
-        libc::AF_INET6 => {
-            let addr: std::net::SocketAddrV6 = unsafe { std::mem::transmute_copy(saddr) };
-            Ok(SocketAddr::V6(addr))
-        }
-        _ => {
-            let err = std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "family must be either AF_INET or AF_INET6",
-            );
-            Err(err)
-        }
-    }
-}
-
-#[allow(dead_code)]
-#[cfg(not(target_os = "windows"))]
-pub(crate) fn std_to_sockaddr(saddr: &SocketAddr) -> libc::sockaddr_storage {
-    match saddr {
-        SocketAddr::V4(saddr) => unsafe { std::mem::transmute_copy(saddr) },
-        SocketAddr::V6(saddr) => unsafe { std::mem::transmute_copy(saddr) },
-    }
-}
-
 pub(crate) fn socketaddr_to_string(addr: &SocketAddr) -> String {
     match addr {
         SocketAddr::V4(addr) => addr.to_string(),
