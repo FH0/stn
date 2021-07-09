@@ -161,13 +161,10 @@ pub(crate) async fn resolve(addr_str: &String) -> Result<String, Box<dyn std::er
 
             for answer in dns_msg.answers() {
                 // ttl
-                let ttl = if answer.ttl() < RESOLVE.read().min_ttl {
-                    RESOLVE.read().min_ttl
-                } else if answer.ttl() > RESOLVE.read().max_ttl {
-                    RESOLVE.read().max_ttl
-                } else {
-                    answer.ttl()
-                } as u64;
+                let ttl = answer
+                    .ttl()
+                    .max(RESOLVE.read().min_ttl)
+                    .min(RESOLVE.read().max_ttl) as _;
 
                 let (addr, is_first) = match answer.rdata() {
                     RData::A(addr) => (addr.to_string(), RESOLVE.read().ipv6_first == false),

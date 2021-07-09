@@ -78,12 +78,7 @@ impl crate::route::OutUdp for super::Out {
                     // set ttl
                     let mut last_ttl = 0u64;
                     for i in dns_msg.answers_mut() {
-                        if i.ttl() < self.min_ttl {
-                            i.set_ttl(self.min_ttl);
-                        } else if i.ttl() > self.max_ttl {
-                            i.set_ttl(self.max_ttl);
-                        }
-
+                        i.set_ttl(i.ttl().max(self.min_ttl).min(self.max_ttl));
                         last_ttl = i.ttl() as _;
                     }
                     let buf = dns_msg.to_vec()?;
