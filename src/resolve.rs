@@ -17,7 +17,7 @@ use trust_dns_proto::{
 };
 
 lazy_static::lazy_static! {
-    static ref RESOLVE :RwLock<Resolve> = RwLock::new(Resolve {
+    static ref RESOLVE: RwLock<Resolve> = RwLock::new(Resolve {
         tag: String::new(),
         server: Arc::new(RwLock::new(Vec::new())),
         udp_timeout: Duration::from_secs(0),

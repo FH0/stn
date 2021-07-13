@@ -1,7 +1,7 @@
-use super::socks5::*;
-use crate::misc::memmove_buf;
+use super::*;
 use log::*;
 use std::sync::Arc;
+use stn_buf::Buf;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -13,8 +13,7 @@ impl super::In {
         self: Arc<Self>,
         client: TcpStream,
         saddr: String,
-        mut buf: Vec<u8>,
-        mut buflen: usize,
+        mut buf: Buf,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // +----+-----+-------+------+----------+----------+
         // |VER | CMD |  RSV  | ATYP | DST.ADDR | DST.PORT |
@@ -36,8 +35,8 @@ impl super::In {
         //    order
 
         // get daddr
-        let (daddr, daddr_len) = get_daddr(&buf[3..])?;
-        memmove_buf(&mut buf, &mut buflen, 4 + daddr_len + 2);
+        let (daddr, daddr_len) = get_daddr(&buf.get_used()[3..])?;
+        buf.drain(..4 + daddr_len + 2);
 
         // connect
         let (mut client_rx, mut client_tx) = client.into_split();
@@ -48,25 +47,24 @@ impl super::In {
         .await??;
 
         tokio::spawn(async move {
-            let mut buf = vec![0; TCP_LEN];
             match bidirectional_with_timeout!(
                 {
-                    // write server, buflen may not 0, so write first
-                    if buflen != 0 {
-                        debug!("{} {} -> {} {}", self.tag, saddr, daddr, buflen);
+                    // write server, buf.len() may not 0, so write first
+                    if buf.len() != 0 {
+                        debug!("{} {} -> {} {}", self.tag, saddr, daddr, buf.len());
                         server_tx
-                            .send(buf[..buflen].to_vec())
+                            .send(buf.get_used().to_vec())
                             .await
                             .or(Err("close"))?;
-                        buflen = 0;
+                        buf.drain(..);
                     }
 
                     // read client
-                    let nread = client_rx.read(&mut buf[buflen..]).await?;
+                    let nread = client_rx.read(unsafe { buf.get_unused() }).await?;
                     if nread == 0 {
                         Err("close")?
                     }
-                    buflen += nread;
+                    buf.add_len(nread);
                 },
                 {
                     // read server

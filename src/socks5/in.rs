@@ -1,7 +1,8 @@
-use super::socks5::*;
-use crate::misc::{build_socket_listener, memmove_buf, socketaddr_to_string};
+use super::*;
+use crate::misc::{build_socket_listener, socketaddr_to_string};
 use log::*;
 use std::{sync::Arc, time::Duration};
+use stn_buf::Buf;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream, UdpSocket},
@@ -94,8 +95,7 @@ impl In {
         mut client: TcpStream,
         saddr: String,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let mut buf = vec![0u8; TCP_LEN];
-        let mut buflen = 0usize;
+        let mut buf = Buf::new(TCP_LEN);
 
         // +----+----------+----------+
         // |VER | NMETHODS | METHODS  |
@@ -110,33 +110,35 @@ impl In {
         // o  X'FF' NO ACCEPTABLE METHODS
 
         // recv
-        let nread = timeout(self.tcp_timeout, client.read(&mut buf)).await??;
-        buflen += nread;
+        let nread = timeout(self.tcp_timeout, client.read(unsafe { buf.get_unused() })).await??;
+        buf.add_len(nread);
         // check length
-        if buflen < 2 || buflen < 2 + buf[1] as usize {
+        if buf.len() < 2 || buf.len() < 2 + buf.get_used()[1] as usize {
             Err(format!(
-                "{} {} buflen < 2 || buflen < 2 + buf[1] as usize",
+                "{} {} buf.len() < 2 || buf.len() < 2 + buf.get_used()[1] as usize",
                 self.tag, saddr
             ))?
         }
         // check version
-        if buf[0] != 5 {
+        if buf.get_used()[0] != 5 {
             Err(format!(
                 "{} {} unsupport socks version:{}",
-                self.tag, saddr, buf[0]
+                self.tag,
+                saddr,
+                buf.get_used()[0]
             ))?
         }
         // check methods
-        if !&buf[2..2 + buf[1] as usize].contains(&0) {
+        if !&buf.get_used()[2..2 + buf.get_used()[1] as usize].contains(&0) {
             Err(format!(
                 "{} {} unsupport methods:{:?}",
                 self.tag,
                 saddr,
-                &buf[2..2 + buf[1] as usize]
+                &buf.get_used()[2..2 + buf.get_used()[1] as usize]
             ))?
         }
-        let header_len = 2 + buf[1] as usize;
-        memmove_buf(&mut buf, &mut buflen, header_len);
+        let header_len = 2 + buf.get_used()[1] as usize;
+        buf.drain(..header_len);
 
         // +----+--------+
         // |VER | METHOD |
@@ -173,29 +175,37 @@ impl In {
         //    order
 
         // recv
-        while buflen < 4
-            || buflen
-                < 4 + match buf[3] {
+        while buf.len() < 4
+            || buf.len()
+                < 4 + match buf.get_used()[3] {
                     ATYP_IPV4 => 4,
                     ATYP_DOMAIN => {
-                        if buflen < 5 {
+                        if buf.len() < 5 {
                             1
                         } else {
-                            1 + buf[4] as usize
+                            1 + buf.get_used()[4] as usize
                         }
                     }
                     ATYP_IPV6 => 16,
-                    _ => Err(format!("{} {} unsupport ATYP:{}", self.tag, saddr, buf[3]))?,
+                    _ => Err(format!(
+                        "{} {} unsupport ATYP:{}",
+                        self.tag,
+                        saddr,
+                        buf.get_used()[3]
+                    ))?,
                 } + 2
         {
-            let nread = timeout(self.tcp_timeout, client.read(&mut buf[buflen..])).await??;
-            buflen += nread;
+            let nread =
+                timeout(self.tcp_timeout, client.read(unsafe { buf.get_unused() })).await??;
+            buf.add_len(nread);
         }
         // check version
-        if buf[0] != 5 {
+        if buf.get_used()[0] != 5 {
             Err(format!(
                 "{} {} unsupport socks version:{}",
-                self.tag, saddr, buf[0]
+                self.tag,
+                saddr,
+                buf.get_used()[0]
             ))?
         }
 
@@ -232,18 +242,19 @@ impl In {
         .await??;
 
         // read CMD
-        match buf[1] {
+        match buf.get_used()[1] {
             CMD_CONNECT => {
-                if let Err(e) = self
-                    .clone()
-                    .handle_tcp(client, saddr.clone(), buf, buflen)
-                    .await
-                {
+                if let Err(e) = self.clone().handle_tcp(client, saddr.clone(), buf).await {
                     warn!("{} {} {}", self.tag, saddr, e);
                 }
             }
             CMD_UDP_ASSOCIATE => self.handle_udp(client).await,
-            _ => Err(format!("{} {} unsupport CMD:{}", self.tag, saddr, buf[1]))?,
+            _ => Err(format!(
+                "{} {} unsupport CMD:{}",
+                self.tag,
+                saddr,
+                buf.get_used()[1]
+            ))?,
         }
 
         Ok(())

@@ -41,15 +41,6 @@ pub(crate) fn socketaddr_to_string(addr: &SocketAddr) -> String {
     }
 }
 
-#[inline]
-pub(crate) fn memmove_buf(buf: &mut [u8], buflen: &mut usize, offset: usize) {
-    unsafe {
-        let ptr = buf.as_mut_ptr();
-        *buflen -= offset;
-        std::ptr::copy(ptr.offset(offset as isize), ptr, *buflen);
-    }
-}
-
 // if addr is ipv6, IPV6_V6ONLY will be disabled
 #[inline]
 pub(crate) fn build_socket_listener(
