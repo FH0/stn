@@ -235,3 +235,22 @@ enum Status {
     LeftContentLength(usize),
     Chunked,
 }
+
+#[tokio::test]
+async fn t1() -> Result<(), Box<dyn std::error::Error>> {
+    let tcp_listener = tokio::net::TcpListener::bind("0.0.0.0:11").await?;
+
+    loop {
+        let (client, addr) = tcp_listener.accept().await?;
+        println!("{}", addr);
+
+        let (mut client, addr) = Stream::new(client).await?;
+        println!("{}", addr);
+
+        let mut server = tokio::net::TcpStream::connect(addr).await?;
+        let r = tokio::io::copy_bidirectional(&mut client, &mut server).await?;
+        println!("{:?}", r);
+
+        println!("");
+    }
+}
