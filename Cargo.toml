@@ -45,9 +45,6 @@ log = "0.4"
 # big/little endian
 bytes = "1"
 
-# http
-hyper = { version = "0.14", features=["full"] }
-
 # used in Future
 pin-project = "1.0"
 
@@ -58,7 +55,7 @@ lru = "0.6"
 # stn_base = { version = "*", path = "stn_base" }
 # stn_dns = { version = "*", path = "stn_dns" }
 # stn_http_proxy_client = { version = "*", path = "stn_http_proxy_client" }
-# stn_http_proxy_server = { version = "*", path = "stn_http_proxy_server" }
+stn_http_proxy_server = { version = "*", path = "stn_http_proxy_server" }
 # stn_socks_client = { version = "*", path = "stn_socks_client" }
 # stn_socks_server = { version = "*", path = "stn_socks_server" }
 stn_buf = { version = "*", path = "stn_buf" }

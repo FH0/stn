@@ -1,19 +1,23 @@
 use super::*;
-use hyper::upgrade::Upgraded;
 use log::*;
 use std::sync::Arc;
+use stn_http_proxy_server::Stream;
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     time::timeout,
 };
 
 impl super::In {
-    pub(crate) async fn handle_connect(
+    pub(crate) async fn handle_handshake<T>(
         self: Arc<Self>,
-        client: Upgraded,
+        client: T,
         saddr: String,
-        daddr: String,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error>>
+    where
+        T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    {
+        let (client, daddr) = Stream::new(client).await?;
+
         // connect
         let (mut client_rx, mut client_tx) = tokio::io::split(client);
         let (server_tx, mut server_rx) = timeout(
