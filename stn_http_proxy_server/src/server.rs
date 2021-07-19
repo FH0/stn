@@ -47,7 +47,7 @@ where
 
             if let httparse::Status::Complete(body_start_index) = header_status {
                 // get daddr
-                let daddr = get_daddr_from_headers(req.headers)?;
+                let daddr = get_daddr_from_request(&req)?;
 
                 // check method
                 let method = req
@@ -132,7 +132,6 @@ where
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
         Box::pin(async {
-            // read from inner if no buf left
             match self.status {
                 Status::ReadHeaders => {
                     if self.readable_len == 0 {

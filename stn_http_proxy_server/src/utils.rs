@@ -1,24 +1,6 @@
 use httparse::{Header, Request};
 use std::io;
 
-pub(crate) fn get_daddr_from_headers(headers: &[Header]) -> io::Result<String> {
-    for i in headers {
-        if i.name == "Host" {
-            let value = String::from_utf8_lossy(i.value).to_string();
-            if value.contains(":") {
-                return Ok(value);
-            } else {
-                return Ok(value + ":80");
-            }
-        }
-    }
-
-    Err(io::Error::new(
-        io::ErrorKind::NotFound,
-        "Host field not found",
-    ))
-}
-
 pub(crate) fn get_content_length(headers: &[Header]) -> io::Result<usize> {
     for i in headers {
         if i.name == "Content-Length" {
@@ -101,6 +83,35 @@ pub(crate) fn rebuild_proxy_request(req: Request) -> io::Result<Vec<u8>> {
 
     // end
     result.extend([b'\r', b'\n']);
+
+    Ok(result)
+}
+
+pub(crate) fn get_daddr_from_request(req: &Request) -> io::Result<String> {
+    let method = req.method.ok_or(io::Error::new(
+        io::ErrorKind::NotFound,
+        "http method not found",
+    ))?;
+    let path = req.path.ok_or(io::Error::new(
+        io::ErrorKind::NotFound,
+        "http path not found",
+    ))?;
+
+    // CONNECT needn't parse
+    let result = if method == "CONNECT" {
+        path
+    } else {
+        path.split("/")
+            .nth(2)
+            .ok_or(io::Error::new(io::ErrorKind::NotFound, "invalid http path"))?
+    };
+
+    // check port
+    let result = if result.contains(":") {
+        result.to_string()
+    } else {
+        format!("{}:80", result)
+    };
 
     Ok(result)
 }
