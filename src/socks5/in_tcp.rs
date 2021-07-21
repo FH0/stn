@@ -1,7 +1,7 @@
 use super::*;
 use log::*;
 use std::sync::Arc;
-use stn_buf::Buf;
+use stn_buf::VecBuf;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -13,7 +13,7 @@ impl super::In {
         self: Arc<Self>,
         client: TcpStream,
         saddr: String,
-        mut buf: Buf,
+        mut buf: Vec<u8>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // +----+-----+-------+------+----------+----------+
         // |VER | CMD |  RSV  | ATYP | DST.ADDR | DST.PORT |
@@ -35,7 +35,7 @@ impl super::In {
         //    order
 
         // get daddr
-        let (daddr, daddr_len) = get_daddr(&buf.get_used()[3..])?;
+        let (daddr, daddr_len) = get_daddr(&buf[3..])?;
         buf.drain(..4 + daddr_len + 2);
 
         // connect
@@ -52,19 +52,16 @@ impl super::In {
                     // write server, buf.len() may not 0, so write first
                     if buf.len() != 0 {
                         debug!("{} {} -> {} {}", self.tag, saddr, daddr, buf.len());
-                        server_tx
-                            .send(buf.get_used().to_vec())
-                            .await
-                            .or(Err("close"))?;
+                        server_tx.send(buf.to_vec()).await.or(Err("close"))?;
                         buf.drain(..);
                     }
 
                     // read client
-                    let nread = client_rx.read(unsafe { buf.get_unused() }).await?;
+                    let nread = client_rx.read(unsafe { buf.remain_mut() }).await?;
                     if nread == 0 {
                         Err("close")?
                     }
-                    buf.add_len(nread);
+                    unsafe { buf.add_len(nread) }
                 },
                 {
                     // read server
