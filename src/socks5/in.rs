@@ -1,5 +1,6 @@
 use super::*;
 use crate::misc::{build_socket_listener, socketaddr_to_string};
+use bytes::BufMut;
 use log::*;
 use std::{sync::Arc, time::Duration};
 use stn_buf::VecBuf;
@@ -226,11 +227,24 @@ impl In {
         //  o  BND.PORT       server bound port in network octet order
 
         // send
-        timeout(
-            self.tcp_timeout,
-            client.write_all(&[5, 0, 0, 1, 0, 0, 0, 0, 0, 0]),
-        )
-        .await??;
+        let write_buf = match socketaddr_to_string(&client.local_addr().unwrap())
+            .parse()
+            .unwrap()
+        {
+            std::net::SocketAddr::V4(addr) => {
+                let mut buf = vec![5, 0, 0, ATYP_IPV4];
+                buf.extend(addr.ip().octets());
+                buf.put_u16(addr.port());
+                buf
+            }
+            std::net::SocketAddr::V6(addr) => {
+                let mut buf = vec![5, 0, 0, ATYP_IPV6];
+                buf.extend(addr.ip().octets());
+                buf.put_u16(addr.port());
+                buf
+            }
+        };
+        timeout(self.tcp_timeout, client.write_all(&write_buf)).await??;
 
         // read CMD
         match buf[1] {
