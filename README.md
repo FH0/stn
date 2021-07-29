@@ -8,7 +8,7 @@ This project makes your network full of possibilities.
 git clone https://github.com/FH0/stn.git
 cd stn
 cargo update
-cargo build --no-default-features --bin stn --release
+cargo build --package stn --no-default-features --bin stn --release
 ```
 
 The compiled file is `target/release/stn`.
