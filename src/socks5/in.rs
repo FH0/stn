@@ -227,10 +227,7 @@ impl In {
         //  o  BND.PORT       server bound port in network octet order
 
         // send
-        let write_buf = match socketaddr_to_string(&client.local_addr().unwrap())
-            .parse()
-            .unwrap()
-        {
+        let write_buf = match socketaddr_to_string(&client.local_addr()?).parse()? {
             std::net::SocketAddr::V4(addr) => {
                 let mut buf = vec![5, 0, 0, ATYP_IPV4];
                 buf.extend(addr.ip().octets());

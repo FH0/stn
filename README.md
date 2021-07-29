@@ -27,3 +27,8 @@ The compiled file is `target/release/stn`.
 ## Script
 
 - [bat script to set http proxy](doc/http_bat.md)
+
+## References
+
+- github.com/changlan/kytan
+- github.com/shadowsocks/shadowsocks-rust

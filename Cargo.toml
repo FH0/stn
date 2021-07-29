@@ -62,6 +62,7 @@ stn_buf = { version = "*", path = "stn_buf" }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 libc = "0.2"
+stn_tun = { version = "*", path = "stn_tun" }
 stn_tproxy = { version = "*", path = "stn_tproxy" }
 
 [target.'cfg(target_os = "linux")'.dependencies]

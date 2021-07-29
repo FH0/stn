@@ -31,7 +31,7 @@ pub(crate) fn get_server_and_refresh_system(
             .collect::<Vec<SocketAddr>>();
 
         // refresh system
-        if let Err(e) = refresh_system(server.clone(), shared_server.clone()) {
+        if let Err(e) = refresh_system(server.clone(), &shared_server) {
             warn!("{}", e);
         };
         let interval = Duration::from_nanos(
@@ -44,7 +44,7 @@ pub(crate) fn get_server_and_refresh_system(
                 async move {
                     loop {
                         sleep(interval).await;
-                        if let Err(e) = refresh_system(server.clone(), shared_server.clone()) {
+                        if let Err(e) = refresh_system(server.clone(), &shared_server) {
                             warn!("{}", e);
                         };
                     }
@@ -63,7 +63,7 @@ pub(crate) fn get_server_and_refresh_system(
 
 pub(crate) fn refresh_system(
     mut origin_server: Vec<SocketAddr>,
-    shared_server: Arc<RwLock<Vec<SocketAddr>>>,
+    shared_server: &RwLock<Vec<SocketAddr>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     cfg_if::cfg_if! {
         if #[cfg(target_os = "windows")] {
