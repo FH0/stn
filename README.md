@@ -30,5 +30,5 @@ The compiled file is `target/release/stn`.
 
 ## References
 
-- github.com/changlan/kytan
-- github.com/shadowsocks/shadowsocks-rust
+- https://github.com/changlan/kytan
+- https://github.com/shadowsocks/shadowsocks-rust
