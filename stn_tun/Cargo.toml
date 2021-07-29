@@ -1,0 +1,14 @@
+[package]
+name = "stn_tun"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+libc = "0.2"
+tokio = { version = "1", features = ["sync", "net", "fs", "rt"] }
+etherparse = "0.9"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
