@@ -44,7 +44,7 @@ impl super::Tun {
     pub(crate) async fn handle_udp(
         &self,
         ip_header: &IpHeader,
-        udp_header: &UdpHeader,
+        udp_header: UdpHeader,
         payload: &[u8],
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let (saddr, daddr) = match ip_header {
@@ -70,7 +70,7 @@ impl super::Tun {
 // ip tuntap add mode tun tun123
 // ifconfig tun123 inet 10.1.2.3 netmask 255.255.255.0 up
 //
-// cargo test udp::t1 -- --nocapture
+// cargo test --package stn_tun udp::t1 -- --nocapture
 //
 // tcpdump -i tun123 -vvnX
 #[tokio::test]
@@ -94,7 +94,7 @@ async fn t1() {
 // ip tuntap add mode tun tun123
 // ifconfig tun123 inet 10.1.2.3 netmask 255.255.255.0 up
 //
-// cargo test udp::t2 -- --nocapture
+// cargo test --package stn_tun udp::t2 -- --nocapture
 //
 // ip route add default dev tun123 table 123
 // ip rule add to 1.2.3.4 lookup 123

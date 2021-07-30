@@ -1,4 +1,4 @@
-use etherparse::{IpHeader, PacketBuilder, TcpHeader};
+use etherparse::{IpHeader, TcpHeader};
 use std::{
     io,
     net::{SocketAddr, ToSocketAddrs},
@@ -24,229 +24,130 @@ impl super::Tun {
 
     pub(crate) async fn handle_tcp(
         &self,
-        ip_header: &IpHeader,
-        tcp_header: &TcpHeader,
+        ip_header: &mut IpHeader,
+        tcp_header: TcpHeader,
         payload: &[u8],
+        buf_len: usize,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let mut builder = {
-            /*
-            tun 10.1.2.3/24
-            tcp_redirect4 10.1.2.3:1
-
-            raw        10.1.2.3:12345 -> 1.2.3.4:80       SYN
-            modified   10.1.2.4:12345 -> 10.1.2.3:1       SYN
-            raw        10.1.2.3:1     -> 10.1.2.4:12345   ACK SYN
-            modified   1.2.3.4:80     -> 10.1.2.3:12345   ACK SYN
-            raw        10.1.2.3:12345 -> 1.2.3.4:80       ACK
-            modified   10.1.2.4:12345 -> 10.1.2.3:1       ACK
-            */
-            match (ip_header, self.tcp_redirect4, self.tcp_redirect6) {
-                (IpHeader::Version4(ip_header), Some((fake_saddr, fake_daddr)), _) => {
-                    let saddr = (fake_saddr.octets(), tcp_header.source_port).into();
-                    let daddr = (ip_header.destination, tcp_header.destination_port).into();
-                    let mut tcp_map_lock = self.tcp_map.lock().unwrap();
-
-                    if tcp_header.syn && !tcp_header.ack {
-                        tcp_map_lock.insert(saddr, (daddr, TcpStatus::Established));
-                    }
-
-                    if let Some((_, status)) = tcp_map_lock.get_mut(&saddr) {
-                        match *status {
-                            TcpStatus::Established => {
-                                if tcp_header.fin {
-                                    *status = TcpStatus::FinWait;
-                                }
-                            }
-                            TcpStatus::FinWait => {
-                                if tcp_header.fin {
-                                    *status = TcpStatus::LastAck;
-                                }
-                            }
-                            TcpStatus::LastAck => {
-                                if tcp_header.ack {
-                                    tcp_map_lock.remove(&saddr);
-                                }
-                            }
-                        }
-                        if tcp_header.rst {
-                            tcp_map_lock.remove(&saddr);
-                        }
-
-                        PacketBuilder::ipv4(
-                            fake_saddr.octets(),
-                            fake_daddr.ip().octets(),
-                            ip_header.time_to_live,
-                        )
-                        .tcp(
-                            saddr.port(),
-                            fake_daddr.port(),
-                            tcp_header.sequence_number,
-                            tcp_header.window_size,
-                        )
-                    } else if let Some((SocketAddr::V4(origin_daddr), status)) =
-                        tcp_map_lock.get_mut(&daddr)
-                    {
-                        let builder = PacketBuilder::ipv4(
-                            origin_daddr.ip().octets(),
-                            fake_daddr.ip().octets(),
-                            ip_header.time_to_live,
-                        )
-                        .tcp(
-                            origin_daddr.port(),
-                            daddr.port(),
-                            tcp_header.sequence_number,
-                            tcp_header.window_size,
-                        );
-
-                        match *status {
-                            TcpStatus::Established => {
-                                if tcp_header.fin {
-                                    *status = TcpStatus::FinWait;
-                                }
-                            }
-                            TcpStatus::FinWait => {
-                                if tcp_header.fin {
-                                    *status = TcpStatus::LastAck;
-                                }
-                            }
-                            TcpStatus::LastAck => {
-                                if tcp_header.ack {
-                                    tcp_map_lock.remove(&saddr);
-                                }
-                            }
-                        }
-                        if tcp_header.rst {
-                            tcp_map_lock.remove(&saddr);
-                        }
-
-                        builder
-                    } else {
-                        return Ok(());
-                    }
-                }
-                (IpHeader::Version6(ip_header), _, Some((fake_saddr, fake_daddr))) => {
-                    let saddr = (fake_saddr.octets(), tcp_header.source_port).into();
-                    let daddr = (ip_header.destination, tcp_header.destination_port).into();
-                    let mut tcp_map_lock = self.tcp_map.lock().unwrap();
-
-                    if tcp_header.syn && !tcp_header.ack {
-                        tcp_map_lock.insert(saddr, (daddr, TcpStatus::Established));
-                    }
-
-                    if let Some((_, status)) = tcp_map_lock.get_mut(&saddr) {
-                        match *status {
-                            TcpStatus::Established => {
-                                if tcp_header.fin {
-                                    *status = TcpStatus::FinWait;
-                                }
-                            }
-                            TcpStatus::FinWait => {
-                                if tcp_header.fin {
-                                    *status = TcpStatus::LastAck;
-                                }
-                            }
-                            TcpStatus::LastAck => {
-                                if tcp_header.ack {
-                                    tcp_map_lock.remove(&saddr);
-                                }
-                            }
-                        }
-                        if tcp_header.rst {
-                            tcp_map_lock.remove(&saddr);
-                        }
-
-                        PacketBuilder::ipv6(
-                            fake_saddr.octets(),
-                            fake_daddr.ip().octets(),
-                            ip_header.hop_limit,
-                        )
-                        .tcp(
-                            saddr.port(),
-                            fake_daddr.port(),
-                            tcp_header.sequence_number,
-                            tcp_header.window_size,
-                        )
-                    } else if let Some((SocketAddr::V6(origin_daddr), status)) =
-                        tcp_map_lock.get_mut(&daddr)
-                    {
-                        let builder = PacketBuilder::ipv6(
-                            origin_daddr.ip().octets(),
-                            fake_daddr.ip().octets(),
-                            ip_header.hop_limit,
-                        )
-                        .tcp(
-                            origin_daddr.port(),
-                            daddr.port(),
-                            tcp_header.sequence_number,
-                            tcp_header.window_size,
-                        );
-
-                        match *status {
-                            TcpStatus::Established => {
-                                if tcp_header.fin {
-                                    *status = TcpStatus::FinWait;
-                                }
-                            }
-                            TcpStatus::FinWait => {
-                                if tcp_header.fin {
-                                    *status = TcpStatus::LastAck;
-                                }
-                            }
-                            TcpStatus::LastAck => {
-                                if tcp_header.ack {
-                                    tcp_map_lock.remove(&saddr);
-                                }
-                            }
-                        }
-                        if tcp_header.rst {
-                            tcp_map_lock.remove(&saddr);
-                        }
-
-                        builder
-                    } else {
-                        return Ok(());
-                    }
-                }
-                _ => return Ok(()),
-            }
-        };
-        if tcp_header.ns {
-            builder = builder.ns();
+        if let Some(buf) = self.handle_buf(ip_header, tcp_header, payload, buf_len)? {
+            self.write(&buf).await?;
         }
-        if tcp_header.fin {
-            builder = builder.fin();
-        }
-        if tcp_header.syn {
-            builder = builder.syn();
-        }
-        if tcp_header.rst {
-            builder = builder.rst();
-        }
-        if tcp_header.psh {
-            builder = builder.psh();
-        }
-        if tcp_header.ack {
-            builder = builder.ack(tcp_header.acknowledgment_number);
-        }
-        if tcp_header.urg {
-            builder = builder.urg(tcp_header.urgent_pointer);
-        }
-        if tcp_header.ece {
-            builder = builder.ece();
-        }
-        if tcp_header.cwr {
-            builder = builder.cwr();
-        }
-        builder = builder
-            .options_raw(tcp_header.options())
-            .map_err(|e| format!("{:?}", e))?;
-
-        let mut buf = Vec::with_capacity(builder.size(payload.len()));
-        builder.write(&mut buf, payload)?;
-
-        self.write(&buf).await?;
 
         Ok(())
+    }
+
+    fn handle_buf(
+        &self,
+        mut ip_header: &mut IpHeader,
+        mut tcp_header: TcpHeader,
+        payload: &[u8],
+        buf_len: usize,
+    ) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut tcp_map_lock = self.tcp_map.lock().unwrap();
+
+        /*
+        tun 10.1.2.3/24
+        tcp_redirect4 10.1.2.3:1
+
+        raw        10.1.2.3:12345 -> 1.2.3.4:80       SYN
+        modified   10.1.2.4:12345 -> 10.1.2.3:1       SYN
+        raw        10.1.2.3:1     -> 10.1.2.4:12345   ACK SYN
+        modified   1.2.3.4:80     -> 10.1.2.3:12345   ACK SYN
+        raw        10.1.2.3:12345 -> 1.2.3.4:80       ACK
+        modified   10.1.2.4:12345 -> 10.1.2.3:1       ACK
+        */
+
+        // modify
+        let (status, saddr) = match (&mut ip_header, self.tcp_redirect4, self.tcp_redirect6) {
+            (IpHeader::Version4(ip_header), Some((fake_saddr, fake_daddr)), _) => {
+                let saddr = (fake_saddr.octets(), tcp_header.source_port).into();
+                let daddr = (ip_header.destination, tcp_header.destination_port).into();
+
+                // syn
+                if tcp_header.syn && !tcp_header.ack {
+                    tcp_map_lock.insert(saddr, (daddr, TcpStatus::Established));
+                }
+
+                if let Some((_, status)) = tcp_map_lock.get_mut(&saddr) {
+                    ip_header.source = fake_saddr.octets();
+                    ip_header.destination = fake_daddr.ip().octets();
+                    ip_header.header_checksum = ip_header.calc_header_checksum()?;
+
+                    tcp_header.source_port = saddr.port();
+                    tcp_header.destination_port = fake_daddr.port();
+                    tcp_header.checksum = tcp_header.calc_checksum_ipv4(&ip_header, payload)?;
+
+                    (status, saddr)
+                } else if let Some((SocketAddr::V4(origin_daddr), status)) =
+                    tcp_map_lock.get_mut(&daddr)
+                {
+                    ip_header.source = origin_daddr.ip().octets();
+                    ip_header.destination = fake_daddr.ip().octets();
+                    ip_header.header_checksum = ip_header.calc_header_checksum()?;
+
+                    tcp_header.source_port = origin_daddr.port();
+                    tcp_header.destination_port = daddr.port();
+                    tcp_header.checksum = tcp_header.calc_checksum_ipv4(&ip_header, payload)?;
+
+                    (status, saddr)
+                } else {
+                    return Ok(None);
+                }
+            }
+            (IpHeader::Version6(ip_header), _, Some((fake_saddr, fake_daddr))) => {
+                let saddr = (fake_saddr.octets(), tcp_header.source_port).into();
+                let daddr = (ip_header.destination, tcp_header.destination_port).into();
+
+                // syn
+                if tcp_header.syn && !tcp_header.ack {
+                    tcp_map_lock.insert(saddr, (daddr, TcpStatus::Established));
+                }
+
+                if let Some((_, status)) = tcp_map_lock.get_mut(&saddr) {
+                    ip_header.source = fake_saddr.octets();
+                    ip_header.destination = fake_daddr.ip().octets();
+
+                    tcp_header.source_port = saddr.port();
+                    tcp_header.destination_port = fake_daddr.port();
+                    tcp_header.checksum = tcp_header.calc_checksum_ipv6(&ip_header, payload)?;
+
+                    (status, saddr)
+                } else if let Some((SocketAddr::V6(origin_daddr), status)) =
+                    tcp_map_lock.get_mut(&daddr)
+                {
+                    ip_header.source = origin_daddr.ip().octets();
+                    ip_header.destination = fake_daddr.ip().octets();
+
+                    tcp_header.source_port = origin_daddr.port();
+                    tcp_header.destination_port = daddr.port();
+                    tcp_header.checksum = tcp_header.calc_checksum_ipv6(&ip_header, payload)?;
+
+                    (status, saddr)
+                } else {
+                    return Ok(None);
+                }
+            }
+            _ => return Ok(None),
+        };
+
+        // status
+        if tcp_header.rst || (tcp_header.ack && *status == TcpStatus::LastAck) {
+            tcp_map_lock.remove(&saddr);
+        } else if tcp_header.fin {
+            if *status == TcpStatus::Established {
+                *status = TcpStatus::FinWait;
+            } else if *status == TcpStatus::FinWait {
+                *status = TcpStatus::LastAck;
+            }
+        }
+
+        // generate buf
+        let mut buf = Vec::with_capacity(buf_len);
+        ip_header.write(&mut buf)?;
+        tcp_header.write(&mut buf)?;
+        buf.extend(payload);
+
+        Ok(Some(buf))
     }
 }
 
@@ -260,9 +161,9 @@ pub(crate) enum TcpStatus {
 // ip tuntap add mode tun tun123
 // ifconfig tun123 inet 10.1.2.3 netmask 255.255.255.0 up
 //
-// cargo test tcp::t1 -- --nocapture
+// cargo test --package stn_tun tcp::t1 -- --nocapture
 //
-// curl --interface tun123 8.8.8.8
+// curl --interface tun123 1.2.3.4
 #[tokio::test]
 async fn t1() {
     use tokio::io::AsyncReadExt;

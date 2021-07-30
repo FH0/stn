@@ -56,8 +56,8 @@ impl Tun {
             let nread = self.read(&mut buf).await?;
 
             // parse
-            let ph = PacketHeaders::from_ip_slice(&buf[..nread])?;
-            let ip_header = match &ph.ip {
+            let mut ph = PacketHeaders::from_ip_slice(&buf[..nread])?;
+            let ip_header = match &mut ph.ip {
                 Some(s) => s,
                 None => Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -68,10 +68,11 @@ impl Tun {
             // dispatch
             match ph.transport {
                 Some(etherparse::TransportHeader::Udp(udp_header)) => {
-                    self.handle_udp(ip_header, &udp_header, ph.payload).await?;
+                    self.handle_udp(ip_header, udp_header, ph.payload).await?;
                 }
                 Some(etherparse::TransportHeader::Tcp(tcp_header)) => {
-                    self.handle_tcp(ip_header, &tcp_header, ph.payload).await?;
+                    self.handle_tcp(ip_header, tcp_header, ph.payload, nread)
+                        .await?;
                 }
                 _ => continue,
             }
